@@ -479,30 +479,28 @@ namespace CvdDivergencia
         protected override void OnRender(RenderContext context, DrawingLayouts layout)
         {
             if (layout != DrawingLayouts.Final) return;
+            if (CurrentBar <= 0) return;
 
-            // Encontrar barras visíveis via binary search em GetXByBar (O log n, sem precisar de API extra).
-            // Pressuposto: barra 0 é a mais à esquerda; CurrentBar é a mais à direita.
-            var regForBars = Container.Region;
+            // Encontrar barras visíveis por interpolação linear O(1).
+            // Usa GetXByBar(0) e GetXByBar(CurrentBar) como âncoras no mesmo sistema
+            // de coordenadas que Container.Region — não depende de FirstVisibleBarNumber.
+            var reg = Container.Region;
             int firstBar, lastBar;
             {
-                int lo = 0, hi = CurrentBar, fb = 0;
-                while (lo <= hi)
-                {
-                    int mid = (lo + hi) / 2;
-                    if (ChartInfo.GetXByBar(mid, false) < regForBars.Left) { fb = mid + 1; lo = mid + 1; }
-                    else hi = mid - 1;
-                }
-                firstBar = fb;
+                int x0 = ChartInfo.GetXByBar(0, false);
+                int xN = ChartInfo.GetXByBar(CurrentBar, false);
 
-                lo = firstBar; hi = CurrentBar;
-                int lb = CurrentBar;
-                while (lo <= hi)
+                if (xN <= x0)
                 {
-                    int mid = (lo + hi) / 2;
-                    if (ChartInfo.GetXByBar(mid, false) > regForBars.Right) { lb = mid - 1; hi = mid - 1; }
-                    else lo = mid + 1;
+                    firstBar = 0;
+                    lastBar  = CurrentBar;
                 }
-                lastBar = Math.Min(lb, CurrentBar);
+                else
+                {
+                    double slope = (double)(xN - x0) / CurrentBar;
+                    firstBar = Math.Max(0,          (int)Math.Floor  ((reg.Left  - x0) / slope) - 1);
+                    lastBar  = Math.Min(CurrentBar, (int)Math.Ceiling((reg.Right - x0) / slope) + 1);
+                }
             }
 
             if (firstBar > lastBar || lastBar < 0) return;
@@ -552,9 +550,9 @@ namespace CvdDivergencia
                 context.DrawString("0", zeroFont, Color.FromArgb(150, 200, 200, 200), reg.Left + 2, yZero - 9);
             }
 
-            // Largura de barra confirmada via PriceChartContainer.BarsWidth
+            // Largura de barra — gap de 1px para candles mais gordas
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
-            int candleW = Math.Max(1, barW - 2);
+            int candleW = Math.Max(1, barW - 1);
             int wickW   = Math.Max(1, barW / 6);
 
             // ----------------------------------------------------------------
@@ -625,11 +623,6 @@ namespace CvdDivergencia
                 var linePen = new RenderPen(lineColor, EspessuraLinha);
                 linePen.DashStyle = DashStyle.Dash;
                 context.DrawLine(linePen, x1, y1, x2, y2);
-
-                // Marcadores nos swing points (quadrados pequenos)
-                int d = 3;
-                context.FillRectangle(lineColor, new Rectangle(x1 - d, y1 - d, d * 2, d * 2));
-                context.FillRectangle(lineColor, new Rectangle(x2 - d, y2 - d, d * 2, d * 2));
 
                 // Label — só desenha se a opção estiver ativa
                 if (MostrarEtiquetas)
