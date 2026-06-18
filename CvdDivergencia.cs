@@ -41,6 +41,10 @@ namespace CvdDivergencia
         [Display(Name = "Mostrar Etiquetas de Texto", GroupName = "Divergências", Order = 3)]
         public bool MostrarEtiquetas { get; set; } = true;
 
+        [Display(Name = "Dias a Mostrar", GroupName = "Divergências", Order = 4)]
+        [Range(1, 30)]
+        public int DiasParaMostrar { get; set; } = 5;
+
         [Display(Name = "Requerer ES Simultâneo", GroupName = "Modo Simultâneo", Order = 0)]
         public bool RequererES { get; set; } = false;
 
@@ -73,7 +77,8 @@ namespace CvdDivergencia
             public DivType  Type;
             public int      Bar1, Bar2;
             public decimal  Cvd1, Cvd2;
-            public decimal  Price1, Price2;  // preço (High ou Low) de cada swing
+            public decimal  Price1, Price2;
+            public DateTime Time2;  // tempo do swing mais recente (Bar2)
         }
 
         // ====================================================================
@@ -285,7 +290,8 @@ namespace CvdDivergencia
                 Type   = type.Value,
                 Bar1   = prev.Bar,    Bar2   = curr.Bar,
                 Cvd1   = prev.CvdVal, Cvd2   = curr.CvdVal,
-                Price1 = prev.Price,  Price2 = curr.Price
+                Price1 = prev.Price,  Price2 = curr.Price,
+                Time2  = curr.Time
             });
         }
 
@@ -313,7 +319,8 @@ namespace CvdDivergencia
                 Type   = type.Value,
                 Bar1   = prev.Bar,    Bar2   = curr.Bar,
                 Cvd1   = prev.CvdVal, Cvd2   = curr.CvdVal,
-                Price1 = prev.Price,  Price2 = curr.Price
+                Price1 = prev.Price,  Price2 = curr.Price,
+                Time2  = curr.Time
             });
         }
 
@@ -466,29 +473,16 @@ namespace CvdDivergencia
             if (layout != DrawingLayouts.Final) return;
             if (CurrentBar <= 0) return;
 
-            var reg = Container.Region;
-            double bw = Math.Max(1.0, (double)ChartInfo.PriceChartContainer.BarsWidth);
-
-            int xCurr = ChartInfo.GetXByBar(CurrentBar, false);
-            double barsOffRight = (xCurr - reg.Right) / bw;
-            int lastBar = barsOffRight > 0.5
-                ? Math.Max(0, CurrentBar - (int)barsOffRight)
-                : CurrentBar;
-
-            int firstBar = 0;
-            for (int b = lastBar - 1; b >= 0; b--)
-            {
-                if (ChartInfo.GetXByBar(b, false) < reg.Left)
-                {
-                    firstBar = b + 1;
-                    break;
-                }
-            }
+            // Filtrar por janela de dias a partir da última barra calculada.
+            // Não filtramos por viewport: GetXByBar devolve sempre a posição correta
+            // mesmo fora do ecrã, e o sistema de rendering clipa automaticamente.
+            DateTime cutoff = GetCandle(CurrentBar).Time.AddDays(-DiasParaMostrar);
+            var toDraw = _divs.Where(d => d.Time2 >= cutoff).ToList();
+            if (toDraw.Count == 0) return;
 
             var labelFont = new RenderFont("Arial", 8);
-            var visible   = _divs.Where(d => d.Bar1 <= lastBar && d.Bar2 >= firstBar).ToList();
 
-            foreach (var div in visible)
+            foreach (var div in toDraw)
             {
                 bool isHigh = div.Type == DivType.ExaustaoHigh || div.Type == DivType.AbsorcaoHigh;
                 bool isExh  = div.Type == DivType.ExaustaoHigh || div.Type == DivType.ExaustaoLow;
