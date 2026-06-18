@@ -481,35 +481,41 @@ namespace CvdDivergencia
             if (layout != DrawingLayouts.Final) return;
             if (CurrentBar <= 0) return;
 
-            // Encontrar barras visíveis por interpolação linear O(1).
-            // Usa GetXByBar(0) e GetXByBar(CurrentBar) como âncoras no mesmo sistema
-            // de coordenadas que Container.Region — não depende de FirstVisibleBarNumber.
             var reg = Container.Region;
+            double bw = Math.Max(1.0, (double)ChartInfo.PriceChartContainer.BarsWidth);
+
+            // Número aproximado de barras visíveis com base na largura do painel
+            int approxVisible = Math.Max(10, (int)(reg.Width / bw));
+
+            // Âncora no CurrentBar: GetXByBar(CurrentBar) dá sempre a posição correta
+            // da barra mais recente, mesmo quando está fora do ecrã à direita.
+            // A partir dessa posição calculamos quantas barras estão deslocadas para a direita
+            // do limite visível (reg.Right) e ajustamos lastBar em conformidade.
             int firstBar, lastBar;
             {
-                int x0 = ChartInfo.GetXByBar(0, false);
-                int xN = ChartInfo.GetXByBar(CurrentBar, false);
+                int xCurr  = ChartInfo.GetXByBar(CurrentBar, false);
+                double barsOffRight = (xCurr - reg.Right) / bw;
 
-                if (xN <= x0)
+                if (barsOffRight > 0.5)
                 {
-                    firstBar = 0;
-                    lastBar  = CurrentBar;
+                    // Chart está scrollado para a esquerda: CurrentBar está fora do ecrã à direita
+                    lastBar  = Math.Min(CurrentBar, Math.Max(0, (int)(CurrentBar - barsOffRight)));
                 }
                 else
                 {
-                    double slope = (double)(xN - x0) / CurrentBar;
-                    firstBar = Math.Max(0,          (int)Math.Floor  ((reg.Left  - x0) / slope) - 1);
-                    lastBar  = Math.Min(CurrentBar, (int)Math.Ceiling((reg.Right - x0) / slope) + 1);
+                    lastBar = CurrentBar;
                 }
+
+                firstBar = Math.Max(0, lastBar - approxVisible - 2);
             }
 
-            if (firstBar > lastBar || lastBar < 0) return;
+            if (firstBar > lastBar) return;
 
-            // --- Calcular min/max CVD na área visível ---
+            // --- Calcular min/max CVD nas barras visíveis ---
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
 
-            for (int b = Math.Max(0, firstBar); b <= lastBar; b++)
+            for (int b = firstBar; b <= lastBar; b++)
             {
                 decimal lo = _cvdLow[b];
                 decimal hi = _cvdHigh[b];
@@ -549,9 +555,9 @@ namespace CvdDivergencia
                 context.DrawString("0", zeroFont, Color.FromArgb(150, 200, 200, 200), reg.Left + 2, yZero - 9);
             }
 
-            // Largura de barra — gap de 1px para candles mais gordas
+            // Largura de barra — sem gap para candles do mesmo tamanho do CVD nativo
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
-            int candleW = Math.Max(1, barW - 1);
+            int candleW = barW;
             int wickW   = Math.Max(1, barW / 6);
 
             // ----------------------------------------------------------------
