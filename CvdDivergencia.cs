@@ -231,6 +231,15 @@ namespace CvdDivergencia
             _cvdHigh[bar] = _cvdOpen[bar] + Math.Max(peakBuy,  Math.Max(0m, c.Delta));
             _cvdLow[bar]  = _cvdOpen[bar] + Math.Min(peakSell, Math.Min(0m, c.Delta));
 
+            // Na barra de início de sessão, _cvdOpen=0, por isso _cvdHigh≥0 e _cvdLow≤0.
+            // Isso faz o ATAS incluir 0 na escala → linha verde no topo + escala de 0 a -5K.
+            // Corrigir: usar apenas o close para que 0 não apareça na escala.
+            if (bar == _sessionStartBar)
+            {
+                _cvdHigh[bar] = _cvdClose[bar];
+                _cvdLow[bar]  = _cvdClose[bar];
+            }
+
             // Detetar swing points (pivot de 3 barras, confirmado em bar-1)
             if (bar >= 2)
                 DetectAndCheckNQ(bar);
