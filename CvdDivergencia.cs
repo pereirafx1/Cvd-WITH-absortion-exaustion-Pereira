@@ -138,13 +138,8 @@ namespace CvdDivergencia
         {
             _cvdClose = new ValueDataSeries("CVD Close") { IsHidden = true, VisualType = VisualMode.Hide };
             _cvdOpen  = new ValueDataSeries("CVD Open")  { IsHidden = true, VisualType = VisualMode.Hide };
-            // VisualMode.Line (não Hide) para que o ATAS crie a escala Y nativa do sub-painel
-            // e desenhe os valores numéricos no lado direito. Cor preta = invisível no fundo escuro.
-            _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true, VisualType = VisualMode.Line };
-            _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true, VisualType = VisualMode.Line };
-            // System.Windows.Media.Color (WPF) — preto é invisível no fundo escuro do ATAS
-            _cvdHigh.Color = System.Windows.Media.Colors.Black;
-            _cvdLow.Color  = System.Windows.Media.Colors.Black;
+            _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true, VisualType = VisualMode.Hide };
+            _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true, VisualType = VisualMode.Hide };
 
             DataSeries[0] = _cvdClose;
             // ⚠ VERIFICAR: DataSeries.Add() é a forma correta de adicionar séries em SDK 10
@@ -525,14 +520,17 @@ namespace CvdDivergencia
 
             if (firstBar > lastBar) return;
 
-            // Min/max a partir de _cvdHigh/_cvdLow das barras visíveis —
-            // é o mesmo intervalo que o ATAS usa para a escala nativa do lado direito.
+            // Escala baseada em _cvdClose das últimas ~100 barras visíveis.
+            // Usar High/Low causava inclusão de valores próximos de 0 (início de sessão)
+            // que inflacionavam a escala e produziam candles minúsculos no fundo do painel.
+            int scaleFirst = Math.Max(firstBar, lastBar - 100);
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
-            for (int b = firstBar; b <= lastBar; b++)
+            for (int b = scaleFirst; b <= lastBar; b++)
             {
-                if (_cvdHigh[b] > maxCvd) maxCvd = _cvdHigh[b];
-                if (_cvdLow[b]  < minCvd) minCvd = _cvdLow[b];
+                decimal cv = _cvdClose[b];
+                if (cv < minCvd) minCvd = cv;
+                if (cv > maxCvd) maxCvd = cv;
             }
             if (minCvd == decimal.MaxValue) return;
             if (maxCvd == minCvd) { maxCvd += 1m; minCvd -= 1m; }
