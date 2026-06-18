@@ -55,6 +55,9 @@ namespace CvdDivergencia
         [Range(1, 5)]
         public int EspessuraLinha { get; set; } = 2;
 
+        [Display(Name = "Mostrar Etiquetas de Texto", GroupName = "Divergências", Order = 3)]
+        public bool MostrarEtiquetas { get; set; } = true;
+
         [Display(Name = "Requerer ES Simultâneo", GroupName = "Modo Simultâneo", Order = 0)]
         public bool RequererES { get; set; } = false;
 
@@ -629,10 +632,13 @@ namespace CvdDivergencia
                 context.FillRectangle(lineColor, new Rectangle(x1 - d, y1 - d, d * 2, d * 2));
                 context.FillRectangle(lineColor, new Rectangle(x2 - d, y2 - d, d * 2, d * 2));
 
-                // Label — DrawString(string, RenderFont, Color, int, int) confirmado
-                int labelX = x2 + 6;
-                int labelY = Clamp(y2 - 10, pTop + 2, pBottom - 14);
-                context.DrawString(label, labelFont, lineColor, labelX, labelY);
+                // Label — só desenha se a opção estiver ativa
+                if (MostrarEtiquetas)
+                {
+                    int labelX = x2 + 6;
+                    int labelY = Clamp(y2 - 10, pTop + 2, pBottom - 14);
+                    context.DrawString(label, labelFont, lineColor, labelX, labelY);
+                }
             }
         }
 
