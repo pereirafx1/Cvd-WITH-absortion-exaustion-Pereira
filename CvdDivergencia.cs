@@ -518,7 +518,10 @@ namespace CvdDivergencia
             for (int b = firstBar; b <= lastBar; b++)
             {
                 decimal lo = _cvdLow[b];
-                decimal hi = _cvdHigh[b];
+                // Em barras de início de sessão, _cvdOpen == 0 e _cvdHigh >= 0 sempre,
+                // o que forçaria maxCvd = 0 e criaria espaço vazio no topo.
+                // Nesses bars usamos _cvdClose para o high, que é o delta real.
+                decimal hi = (_cvdOpen[b] == 0m) ? _cvdClose[b] : _cvdHigh[b];
                 if (lo < minCvd) minCvd = lo;
                 if (hi > maxCvd) maxCvd = hi;
             }
