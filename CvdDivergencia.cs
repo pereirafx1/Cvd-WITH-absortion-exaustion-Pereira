@@ -1,19 +1,25 @@
 // ============================================================================
-//  CVD Divergência NQ/ES  —  ATAS Platform  (SDK 10)
+//  CVD With Exaus/Absor. Pereira  —  ATAS Platform  (SDK 10)
 //  Deteta Exaustão e Absorção entre preço e CVD no NQ (1 min),
 //  com confirmação simultânea opcional no ES.
 //
-//  NOTAS DE COMPILAÇÃO:
-//  Alguns nomes de API do ATAS SDK 10 podem diferir ligeiramente entre versões.
-//  Os pontos assinalados com "⚠ SDK" podem precisar de ajuste.
-//  Consultar o IntelliSense ou os exemplos em %PROGRAMFILES(X86)%\ATAS Platform\Examples
+//  REFERÊNCIAS DE API CONFIRMADAS (docs.atas.net + github.com/AtasPlatform/Indicators):
+//  • EnableCustomDrawing = true  +  SubscribeToDrawingEvents()  obrigatórios
+//  • context.DrawLine(RenderPen, x1, y1, x2, y2)             — 4 ints, não Points
+//  • context.FillRectangle(Color, Rectangle)                  — Color, não Brush
+//  • context.DrawRectangle(RenderPen, Rectangle)              — RenderPen, não Pen
+//  • context.DrawString(string, RenderFont, Color, int, int)  — RenderFont + Color
+//  • ChartInfo.GetXByBar(bar, false)                          — 2 params (centro)
+//  • ChartInfo.PriceChartContainer.BarsWidth                  — largura de barra
+//  • Container.Region                                          — bounds do painel
+//  • IndicatorDataProvider.NewPanel                            — cria sub-painel
+//  • IndicatorCandle.MaxDelta / .MinDelta                      — confirmados no SDK
 // ============================================================================
 
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
-using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Linq;
@@ -24,13 +30,13 @@ using OFT.Rendering.Tools;
 
 namespace CvdDivergencia
 {
-    [DisplayName("CVD Divergência NQ/ES")]
+    [DisplayName("CVD With Exaus/Absor. Pereira")]
     [Category("Custom")]
     [Description("Divergências Exaustão/Absorção entre preço e CVD. Painel próprio com CVD em candles.")]
     public class CvdDivergencia : Indicator
     {
         // ====================================================================
-        //  PARÂMETROS CONFIGURÁVEIS  (visíveis no painel de settings do ATAS)
+        //  PARÂMETROS CONFIGURÁVEIS
         // ====================================================================
 
         [Display(Name = "Cor Candle Bid (delta ↓)", GroupName = "CVD – Candles", Order = 0)]
@@ -62,9 +68,9 @@ namespace CvdDivergencia
 
         private struct SwingPoint
         {
-            public int     Bar;
-            public decimal Price;    // high ou low do preço no swing
-            public decimal CvdVal;   // valor CVD (high ou low) no swing
+            public int      Bar;
+            public decimal  Price;    // high ou low do preço no swing
+            public decimal  CvdVal;   // valor CVD (high ou low) no swing
             public DateTime Time;
         }
 
@@ -79,15 +85,14 @@ namespace CvdDivergencia
         private struct Divergence
         {
             public DivType  Type;
-            public int      Bar1, Bar2;   // barras dos dois swing points
-            public decimal  Cvd1, Cvd2;  // valores CVD nessas barras
+            public int      Bar1, Bar2;
+            public decimal  Cvd1, Cvd2;
         }
 
         // ====================================================================
         //  SÉRIES DE DADOS – CVD (NQ)
-        //
-        //  ⚠ SDK: 'IndicatorDataProvider.NewPanel' cria o sub-painel separado.
-        //  Se não compilar, substituir por: Panel = "CVD"  ou  Panel = 1
+        //  Série 0 com Panel = IndicatorDataProvider.NewPanel cria o sub-painel.
+        //  IsHidden = true impede que o ATAS desenhe a linha; nós desenhamos em OnRender.
         // ====================================================================
 
         private readonly ValueDataSeries _cvdClose;
@@ -122,12 +127,11 @@ namespace CvdDivergencia
 
         public CvdDivergencia()
         {
-            // Série 0: define o sub-painel e a escala Y automática do ATAS.
-            // IsHidden = true → o ATAS não desenha a linha por si; nós desenhamos as candles em OnRender.
+            // Série 0: define o sub-painel e a escala Y automática.
             _cvdClose = new ValueDataSeries("CVD Close")
             {
                 IsHidden = true,
-                Panel    = IndicatorDataProvider.NewPanel   // ⚠ SDK: cria painel separado
+                Panel    = IndicatorDataProvider.NewPanel
             };
             _cvdOpen  = new ValueDataSeries("CVD Open")  { IsHidden = true };
             _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true };
@@ -137,6 +141,10 @@ namespace CvdDivergencia
             Add(_cvdOpen);
             Add(_cvdHigh);
             Add(_cvdLow);
+
+            // Obrigatório para que OnRender seja chamado
+            EnableCustomDrawing = true;
+            SubscribeToDrawingEvents(DrawingLayouts.Final);
         }
 
         // ====================================================================
@@ -149,6 +157,7 @@ namespace CvdDivergencia
             StartEsSource();
         }
 
+        // ⚠ VERIFICAR: se não compilar, renomear para Dispose() ou OnDestroy()
         protected override void OnDispose()
         {
             DisposeEsSource();
@@ -180,7 +189,7 @@ namespace CvdDivergencia
         {
             var c = GetCandle(bar);
 
-            // --- Acumular CVD barra a barra ---
+            // Acumular CVD barra a barra
             if (bar == 0)
             {
                 _cvdOpen[0]  = 0m;
@@ -192,29 +201,26 @@ namespace CvdDivergencia
                 _cvdClose[bar] = _cvdClose[bar - 1] + c.Delta;
             }
 
-            // CVD High/Low intrabar:
-            // MaxDelta = pico comprador acumulado durante a barra
-            // MinDelta = pico vendedor acumulado durante a barra
-            // Se c.MaxDelta / c.MinDelta não existirem no SDK, usar Open/Close (comentar as duas linhas abaixo).
+            // CVD High/Low intrabar via MaxDelta / MinDelta (confirmados no SDK)
             decimal peakBuy  = Math.Max(0m, c.MaxDelta);
             decimal peakSell = Math.Min(0m, c.MinDelta);
 
             _cvdHigh[bar] = _cvdOpen[bar] + Math.Max(peakBuy,  Math.Max(0m, c.Delta));
             _cvdLow[bar]  = _cvdOpen[bar] + Math.Min(peakSell, Math.Min(0m, c.Delta));
 
-            // --- Swing point detection (pivot de 3 barras, confirmado em bar-1) ---
+            // Detetar swing points (pivot de 3 barras, confirmado em bar-1)
             if (bar >= 2)
                 DetectAndCheckNQ(bar);
         }
 
         // ====================================================================
-        //  DETECÇÃO DE SWING POINTS E DIVERGÊNCIAS — NQ
+        //  SWING POINTS E DIVERGÊNCIAS — NQ
         // ====================================================================
 
         private void DetectAndCheckNQ(int bar)
         {
             var c0 = GetCandle(bar - 2);
-            var c1 = GetCandle(bar - 1);   // candidato a swing — barra do meio
+            var c1 = GetCandle(bar - 1);   // barra candidata — a do meio
             var c2 = GetCandle(bar);
 
             // ---- Swing High confirmado em bar-1 ----
@@ -262,14 +268,12 @@ namespace CvdDivergencia
             bool cvdHigher   = curr.CvdVal > prev.CvdVal;
 
             DivType? type = null;
-            if ( priceHigher && !cvdHigher) type = DivType.ExaustaoHigh;  // preço novo high, CVD não acompanha
-            if (!priceHigher &&  cvdHigher) type = DivType.AbsorcaoHigh;  // CVD novo high, preço absorvido
+            if ( priceHigher && !cvdHigher) type = DivType.ExaustaoHigh;   // preço novo high, CVD não confirma
+            if (!priceHigher &&  cvdHigher) type = DivType.AbsorcaoHigh;   // CVD novo high, preço absorvido
             if (type == null) return;
 
-            // Filtro modo simultâneo ES
             if (RequererES && !EsHasHighDiv(type.Value, curr.Time)) return;
 
-            // Substituir divergência existente no mesmo swing
             _divs.RemoveAll(d => d.Bar2 == curr.Bar &&
                 (d.Type == DivType.ExaustaoHigh || d.Type == DivType.AbsorcaoHigh));
 
@@ -291,8 +295,8 @@ namespace CvdDivergencia
             bool cvdLower   = curr.CvdVal < prev.CvdVal;
 
             DivType? type = null;
-            if ( priceLower && !cvdLower) type = DivType.ExaustaoLow;   // preço novo low, CVD não acompanha
-            if (!priceLower &&  cvdLower) type = DivType.AbsorcaoLow;   // CVD novo low, preço absorvido
+            if ( priceLower && !cvdLower) type = DivType.ExaustaoLow;    // preço novo low, CVD não confirma
+            if (!priceLower &&  cvdLower) type = DivType.AbsorcaoLow;    // CVD novo low, preço absorvido
             if (type == null) return;
 
             if (RequererES && !EsHasLowDiv(type.Value, curr.Time)) return;
@@ -310,6 +314,15 @@ namespace CvdDivergencia
 
         // ====================================================================
         //  ES — DATA SOURCE EM BACKGROUND
+        //
+        //  ⚠ VERIFICAR: A API de SecurityDataSource pode variar conforme a versão
+        //  do SDK instalado. Pontos a confirmar com IntelliSense:
+        //    1. Construtor: new SecurityDataSource(string symbol, CandleSeries period)
+        //       Alternativas: new SecurityDataSource(Security, CandleSeries)
+        //                     new SecurityDataSource(string symbol)
+        //    2. Evento: NewCandleCreated  (alternativas: NewCandle, CandleUpdated)
+        //    3. EventArgs: CandleEventArgs com propriedade e.Candle
+        //    4. Start() / Stop() / Dispose() — confirmar nomes
         // ====================================================================
 
         private void StartEsSource()
@@ -319,21 +332,15 @@ namespace CvdDivergencia
 
             try
             {
-                // ⚠ SDK: SecurityDataSource carrega barras de outro instrumento.
-                // Primeiro arg: símbolo (ajustar para contrato activo: "ESM25", "ESU25", etc.)
-                // Segundo arg: período — idêntico ao gráfico NQ (CandleSeries de 1 min).
-                // API exacta: ver ATAS.Indicators.SecurityDataSource no SDK instalado.
-                //
-                // Alternativas possíveis:
-                //   new SecurityDataSource("ES")
-                //   new SecurityDataSource("ES", new CandleSeries(TimeFrameType.Minute, 1))
+                // ⚠ VERIFICAR: construtor e tipo do segundo argumento (period)
                 _esSource = new SecurityDataSource("ES", CurrentSeries.Period);
+                // ⚠ VERIFICAR: nome do evento (pode ser NewCandle ou CandleUpdated)
                 _esSource.NewCandleCreated += OnEsCandle;
                 _esSource.Start();
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Debug.WriteLine($"[CvdDiv] ES DataSource indisponível: {ex.Message}");
+                // ES não disponível — o indicador continua em modo NQ-only
                 _esSource = null;
             }
         }
@@ -343,6 +350,7 @@ namespace CvdDivergencia
             if (_esSource == null) return;
             try
             {
+                // ⚠ VERIFICAR: nome do evento (deve ser o mesmo do Subscribe acima)
                 _esSource.NewCandleCreated -= OnEsCandle;
                 _esSource.Stop();
                 _esSource.Dispose();
@@ -351,52 +359,40 @@ namespace CvdDivergencia
             _esSource = null;
         }
 
-        // ⚠ SDK: assinatura do handler pode variar — ajustar EventArgs se necessário
+        // ⚠ VERIFICAR: tipo do EventArgs (pode ser EventArgs ou outro tipo específico do SDK)
+        // Alternativa: private void OnEsCandle(object sender, EventArgs e)
         private void OnEsCandle(object sender, CandleEventArgs e)
         {
+            // ⚠ VERIFICAR: acesso à candle (pode ser e.Value ou e.Bar em vez de e.Candle)
             var c = e.Candle;
 
             lock (_esLock)
             {
                 decimal close = _esCvdPrev + c.Delta;
 
-                // Manter histórico de CVD close e timestamps do ES
                 int idx = _esCvdClose.Count;
                 _esCvdClose.Add(close);
                 _esTime.Add(c.Time);
                 _esCvdPrev = close;
 
-                // Swing points do ES (usando CVD close como proxy de high/low)
                 if (idx >= 2)
                 {
                     decimal v0 = _esCvdClose[idx - 2];
-                    decimal v1 = _esCvdClose[idx - 1];   // candidato
+                    decimal v1 = _esCvdClose[idx - 1];
                     decimal v2 = _esCvdClose[idx];
 
-                    if (v1 > v0 && v1 > v2)  // ES Swing High (CVD)
+                    if (v1 > v0 && v1 > v2)
                     {
-                        var sp = new SwingPoint
-                        {
-                            Bar    = idx - 1,
-                            Price  = c.High,           // preço ES
-                            CvdVal = v1,
-                            Time   = _esTime[idx - 1]
-                        };
+                        var sp = new SwingPoint { Bar = idx - 1, Price = c.High, CvdVal = v1, Time = _esTime[idx - 1] };
                         _highsES.RemoveAll(s => s.Bar == idx - 1);
                         _highsES.Add(sp);
                         if (_highsES.Count >= 2)
                             TryAddEsDivHigh(_highsES[_highsES.Count - 2], sp);
                     }
 
-                    if (v1 < v0 && v1 < v2)  // ES Swing Low (CVD)
+                    if (v1 < v0 && v1 < v2)
                     {
-                        var sp = new SwingPoint
-                        {
-                            Bar    = idx - 1,
-                            Price  = c.Low,
-                            CvdVal = v1,
-                            Time   = _esTime[idx - 1]
-                        };
+                        var sp = new SwingPoint { Bar = idx - 1, Price = c.Low, CvdVal = v1, Time = _esTime[idx - 1] };
                         _lowsES.RemoveAll(s => s.Bar == idx - 1);
                         _lowsES.Add(sp);
                         if (_lowsES.Count >= 2)
@@ -408,8 +404,7 @@ namespace CvdDivergencia
 
         private void TryAddEsDivHigh(SwingPoint prev, SwingPoint curr)
         {
-            bool pH = curr.Price  > prev.Price;
-            bool cH = curr.CvdVal > prev.CvdVal;
+            bool pH = curr.Price > prev.Price, cH = curr.CvdVal > prev.CvdVal;
             DivType? t = null;
             if ( pH && !cH) t = DivType.ExaustaoHigh;
             if (!pH &&  cH) t = DivType.AbsorcaoHigh;
@@ -422,8 +417,7 @@ namespace CvdDivergencia
 
         private void TryAddEsDivLow(SwingPoint prev, SwingPoint curr)
         {
-            bool pL = curr.Price  < prev.Price;
-            bool cL = curr.CvdVal < prev.CvdVal;
+            bool pL = curr.Price < prev.Price, cL = curr.CvdVal < prev.CvdVal;
             DivType? t = null;
             if ( pL && !cL) t = DivType.ExaustaoLow;
             if (!pL &&  cL) t = DivType.AbsorcaoLow;
@@ -463,14 +457,17 @@ namespace CvdDivergencia
         // ====================================================================
         //  RENDERING — CVD CANDLES + LINHAS DE DIVERGÊNCIA
         //
-        //  ⚠ SDK: 'Container.Region' é a propriedade standard em ATAS SDK 10
-        //  para obter o Rectangle do painel do indicador.
-        //  Alternativas se não compilar:
-        //    ChartInfo.PanelsBoundsInfo[DataSeries[0].Panel].Bounds
-        //    ou inspecionar ChartInfo no IntelliSense
+        //  APIs confirmadas contra exemplos oficiais do ATAS SDK:
+        //  • context.FillRectangle(Color, Rectangle)             — sem Brush
+        //  • context.DrawRectangle(RenderPen, Rectangle)         — RenderPen
+        //  • context.DrawLine(RenderPen, x1, y1, x2, y2)        — 4 ints
+        //  • context.DrawString(s, RenderFont, Color, int, int)  — sem Brush/PointF
+        //  • ChartInfo.GetXByBar(bar, false)                     — false=centro da barra
+        //  • ChartInfo.PriceChartContainer.BarsWidth             — largura da barra
+        //  • Container.Region                                     — Rectangle do painel
         // ====================================================================
 
-        public override void OnRender(RenderContext context, DrawingLayouts layout)
+        protected override void OnRender(RenderContext context, DrawingLayouts layout)
         {
             if (layout != DrawingLayouts.Final) return;
 
@@ -479,7 +476,7 @@ namespace CvdDivergencia
 
             if (firstBar > lastBar || lastBar < 0) return;
 
-            // --- Calcular min/max CVD na área visível para escala Y ---
+            // --- Calcular min/max CVD na área visível ---
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
 
@@ -491,131 +488,106 @@ namespace CvdDivergencia
                 if (hi > maxCvd) maxCvd = hi;
             }
 
-            if (minCvd == decimal.MaxValue) return;   // sem dados ainda
-            if (maxCvd == minCvd) { maxCvd = minCvd + 1m; }
+            if (minCvd == decimal.MaxValue) return;
+            if (maxCvd == minCvd) maxCvd = minCvd + 1m;
 
-            // Obter bounds do painel do indicador
-            // ⚠ SDK: se Container.Region não existir, ver nota no cabeçalho desta secção
-            var panelRect = Container.Region;
-            int pTop    = panelRect.Top    + 4;    // margem de 4 px no topo
-            int pBottom = panelRect.Bottom - 4;    // margem de 4 px na base
+            // Bounds do painel do indicador (Container.Region confirmado em exemplos SDK)
+            var reg    = Container.Region;
+            int pTop    = reg.Top    + 4;
+            int pBottom = reg.Bottom - 4;
             int pHeight = pBottom - pTop;
-
             if (pHeight <= 0) return;
 
-            // Converte valor CVD para pixel Y (GDI+: Y=0 no topo, cresce para baixo)
+            // Converte CVD → pixel Y (Y=0 no topo em GDI+)
             double CvdToY(decimal cvd)
             {
                 double ratio = (double)(cvd - minCvd) / (double)(maxCvd - minCvd);
                 return pBottom - ratio * pHeight;
             }
 
-            // Largura de barra (em pixeis) — usada para sizing das candles
-            int xBar0   = ChartInfo.GetXByBar(firstBar);
-            int xBar1   = firstBar + 1 <= lastBar ? ChartInfo.GetXByBar(firstBar + 1) : xBar0 + 8;
-            int barW    = Math.Max(2, Math.Abs(xBar1 - xBar0));
+            // Largura de barra confirmada via PriceChartContainer.BarsWidth
+            int barW    = Math.Max(2, ChartInfo.PriceChartContainer.BarsWidth);
             int candleW = Math.Max(1, barW - 2);
             int wickW   = Math.Max(1, barW / 6);
 
             // ----------------------------------------------------------------
             //  Desenhar CVD candles
             // ----------------------------------------------------------------
-            for (int b = firstBar; b <= lastBar; b++)
+            for (int b = Math.Max(0, firstBar); b <= lastBar; b++)
             {
                 decimal cvdO = _cvdOpen[b];
                 decimal cvdC = _cvdClose[b];
                 decimal cvdH = _cvdHigh[b];
                 decimal cvdL = _cvdLow[b];
 
-                bool bullish = cvdC >= cvdO;
-                Color barColor = bullish ? CorCandleAsk : CorCandleBid;
+                Color barColor = cvdC >= cvdO ? CorCandleAsk : CorCandleBid;
 
-                int xCenter = ChartInfo.GetXByBar(b);
+                // GetXByBar(bar, isStartOfBar) — false = centro da barra
+                int xCenter = ChartInfo.GetXByBar(b, false);
                 int xLeft   = xCenter - candleW / 2;
 
-                int yO = (int)Math.Round(CvdToY(cvdO));
-                int yC = (int)Math.Round(CvdToY(cvdC));
-                int yH = (int)Math.Round(CvdToY(cvdH));
-                int yL = (int)Math.Round(CvdToY(cvdL));
+                int yO = Clamp((int)Math.Round(CvdToY(cvdO)), pTop, pBottom);
+                int yC = Clamp((int)Math.Round(CvdToY(cvdC)), pTop, pBottom);
+                int yH = Clamp((int)Math.Round(CvdToY(cvdH)), pTop, pBottom);
+                int yL = Clamp((int)Math.Round(CvdToY(cvdL)), pTop, pBottom);
 
-                // Clamp ao painel
-                yO = Clamp(yO, pTop, pBottom);
-                yC = Clamp(yC, pTop, pBottom);
-                yH = Clamp(yH, pTop, pBottom);
-                yL = Clamp(yL, pTop, pBottom);
+                int bodyTop = Math.Min(yO, yC);
+                int bodyBot = Math.Max(yO, yC);
+                int bodyH   = Math.Max(1, bodyBot - bodyTop);
 
-                int bodyTop    = Math.Min(yO, yC);
-                int bodyBottom = Math.Max(yO, yC);
-                int bodyH      = Math.Max(1, bodyBottom - bodyTop);
+                // Corpo — FillRectangle(Color, Rectangle) confirmado
+                context.FillRectangle(barColor, new Rectangle(xLeft, bodyTop, candleW, bodyH));
 
-                // Corpo
-                using (var brush = new SolidBrush(barColor))
-                    context.FillRectangle(brush, new Rectangle(xLeft, bodyTop, candleW, bodyH));
+                // Borda semi-transparente — DrawRectangle(RenderPen, Rectangle) confirmado
+                var borderPen = new RenderPen(Color.FromArgb(80, 0, 0, 0));
+                context.DrawRectangle(borderPen, new Rectangle(xLeft, bodyTop, candleW, bodyH));
 
-                // Borda semi-transparente
-                using (var pen = new Pen(Color.FromArgb(100, 0, 0, 0), 1))
-                    context.DrawRectangle(pen, new Rectangle(xLeft, bodyTop, candleW, bodyH));
-
-                // Wick superior
+                // Wicks — DrawLine(RenderPen, x1, y1, x2, y2) confirmado
+                var wickPen = new RenderPen(barColor, wickW);
                 if (yH < bodyTop)
-                {
-                    using (var pen = new Pen(barColor, wickW))
-                        context.DrawLine(pen, new Point(xCenter, yH), new Point(xCenter, bodyTop));
-                }
-
-                // Wick inferior
-                if (yL > bodyBottom)
-                {
-                    using (var pen = new Pen(barColor, wickW))
-                        context.DrawLine(pen, new Point(xCenter, bodyBottom), new Point(xCenter, yL));
-                }
+                    context.DrawLine(wickPen, xCenter, yH, xCenter, bodyTop);
+                if (yL > bodyBot)
+                    context.DrawLine(wickPen, xCenter, bodyBot, xCenter, yL);
             }
 
             // ----------------------------------------------------------------
             //  Desenhar linhas de divergência
             // ----------------------------------------------------------------
-            using (var labelFont = new Font("Arial", 8f, FontStyle.Bold))
+            var labelFont = new RenderFont("Arial", 8);
+
+            var visible = _divs
+                .Where(d => d.Bar1 <= lastBar && d.Bar2 >= firstBar)
+                .ToList();
+
+            foreach (var div in visible)
             {
-                var visible = _divs
-                    .Where(d => d.Bar1 <= lastBar && d.Bar2 >= firstBar)
-                    .ToList();
+                bool isHigh = div.Type == DivType.ExaustaoHigh || div.Type == DivType.AbsorcaoHigh;
+                bool isExh  = div.Type == DivType.ExaustaoHigh || div.Type == DivType.ExaustaoLow;
 
-                foreach (var div in visible)
-                {
-                    bool isHigh = div.Type == DivType.ExaustaoHigh || div.Type == DivType.AbsorcaoHigh;
-                    bool isExh  = div.Type == DivType.ExaustaoHigh || div.Type == DivType.ExaustaoLow;
+                Color  lineColor = isExh ? CorLinhaExaustao : CorLinhaAbsorcao;
+                string label     = isExh ? "Exaustao" : "Absorcao";
+                label += isHigh ? " ^" : " v";
 
-                    Color lineColor = isExh ? CorLinhaExaustao : CorLinhaAbsorcao;
-                    string label    = isExh ? "Exaustão" : "Absorção";
-                    label += isHigh ? " ▲" : " ▼";
+                int x1 = ChartInfo.GetXByBar(div.Bar1, false);
+                int x2 = ChartInfo.GetXByBar(div.Bar2, false);
+                int y1 = Clamp((int)Math.Round(CvdToY(div.Cvd1)), pTop, pBottom);
+                int y2 = Clamp((int)Math.Round(CvdToY(div.Cvd2)), pTop, pBottom);
 
-                    int x1 = ChartInfo.GetXByBar(div.Bar1);
-                    int x2 = ChartInfo.GetXByBar(div.Bar2);
-                    int y1 = Clamp((int)Math.Round(CvdToY(div.Cvd1)), pTop, pBottom);
-                    int y2 = Clamp((int)Math.Round(CvdToY(div.Cvd2)), pTop, pBottom);
+                // Linha de divergência tracejada
+                // ⚠ VERIFICAR: se RenderPen não tiver DashStyle, remover a linha pen.DashStyle
+                var linePen = new RenderPen(lineColor, EspessuraLinha);
+                linePen.DashStyle = DashStyle.Dash;
+                context.DrawLine(linePen, x1, y1, x2, y2);
 
-                    // Linha tracejada entre os dois swing points do CVD
-                    using (var pen = new Pen(lineColor, EspessuraLinha)
-                           { DashStyle = DashStyle.Dash })
-                    {
-                        context.DrawLine(pen, new Point(x1, y1), new Point(x2, y2));
-                    }
+                // Marcadores nos swing points (quadrados pequenos)
+                int d = 3;
+                context.FillRectangle(lineColor, new Rectangle(x1 - d, y1 - d, d * 2, d * 2));
+                context.FillRectangle(lineColor, new Rectangle(x2 - d, y2 - d, d * 2, d * 2));
 
-                    // Pequenos quadrados nos pontos de swing (mais compatível que FillEllipse)
-                    int dotR = 3;
-                    using (var brush = new SolidBrush(lineColor))
-                    {
-                        context.FillRectangle(brush, new Rectangle(x1 - dotR, y1 - dotR, dotR * 2, dotR * 2));
-                        context.FillRectangle(brush, new Rectangle(x2 - dotR, y2 - dotR, dotR * 2, dotR * 2));
-                    }
-
-                    // Label próximo do swing point mais recente
-                    int labelX = x2 + 6;
-                    int labelY = Clamp(y2 - 10, pTop + 2, pBottom - 16);
-
-                    using (var brush = new SolidBrush(lineColor))
-                        context.DrawString(label, labelFont, brush, new PointF(labelX, labelY));
-                }
+                // Label — DrawString(string, RenderFont, Color, int, int) confirmado
+                int labelX = x2 + 6;
+                int labelY = Clamp(y2 - 10, pTop + 2, pBottom - 14);
+                context.DrawString(label, labelFont, lineColor, labelX, labelY);
             }
         }
 
@@ -623,7 +595,7 @@ namespace CvdDivergencia
         //  UTILITÁRIOS
         // ====================================================================
 
-        private static int Clamp(int value, int min, int max)
-            => value < min ? min : value > max ? max : value;
+        private static int Clamp(int v, int lo, int hi)
+            => v < lo ? lo : v > hi ? hi : v;
     }
 }
