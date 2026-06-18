@@ -557,6 +557,16 @@ namespace CvdDivergencia
             int candleW = barW;
             int wickW   = Math.Max(1, barW / 6);
 
+            // DEBUG — etiqueta temporária para diagnóstico de sistema de coordenadas
+            // (remover após confirmar valores corretos)
+            {
+                int xCurr0 = ChartInfo.GetXByBar(CurrentBar, false);
+                int xPrev0 = CurrentBar > 0 ? ChartInfo.GetXByBar(CurrentBar - 1, false) : xCurr0 - barW;
+                var dbgFont = new RenderFont("Arial", 7);
+                string dbg = $"L={reg.Left} R={reg.Right} W={reg.Width} bw={bw:F1} dx={xCurr0 - xPrev0} xC={xCurr0} sess={_sessionStartBar} fb={firstBar} lb={lastBar} minC={_cvdClose[_sessionStartBar]:F0}";
+                context.DrawString(dbg, dbgFont, Color.Yellow, reg.Left + 4, pTop + 2);
+            }
+
             // ----------------------------------------------------------------
             //  Desenhar CVD candles
             // ----------------------------------------------------------------
