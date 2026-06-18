@@ -491,11 +491,13 @@ namespace CvdDivergencia
             var reg = Container.Region;
             double bw = Math.Max(1.0, (double)ChartInfo.PriceChartContainer.BarsWidth);
 
-            // reg.Right é o bordo direito do painel em coordenadas de ecrã (≈ largura visível em px).
-            // reg.Width NÃO É a largura visível — é reg.Right − reg.Left, onde reg.Left é o bordo
-            // esquerdo do CANVAS total (número negativo grande), tornando reg.Width enorme.
-            // Usar reg.Right / bw dá o número correto de barras que cabem no viewport.
-            int approxVisible = Math.Max(10, (int)(reg.Right / bw));
+            // reg está em coordenadas de CANVAS (não de ecrã).
+            // reg.Right = canvas total width ≈ CurrentBar × bw → reg.Right/bw = CurrentBar (inútil).
+            // Estimamos o viewport com 2000px fixos: a bw=2 vemos ~1000 barras (zoom total),
+            // a bw=10 vemos ~200 barras, a bw=20 vemos ~100 barras.
+            // Quando a sessão é mais curta do que approxVisible, firstBar = _sessionStartBar (correto).
+            // Quando a sessão é mais longa (bw ≥ ~5), approxVisible < sessão → apenas barras recentes.
+            int approxVisible = Math.Max(10, (int)(2000.0 / bw));
 
             int firstBar, lastBar;
             {
@@ -513,12 +515,7 @@ namespace CvdDivergencia
 
             if (firstBar > lastBar) return;
 
-            // --- Calcular min/max CVD nas barras visíveis ---
-            // Usamos apenas _cvdClose para a escala Y.
-            // _cvdHigh/_cvdLow incluem peakBuy/peakSell intrabar que podem cruzar 0
-            // mesmo com o CVD em terreno profundamente negativo, forçando a linha do 0
-            // a aparecer no topo e criando espaço vazio. O _cvdClose é o CVD acumulado
-            // real — a escala reflecte para onde o CVD efectivamente foi.
+            // --- Min/max CVD usando apenas _cvdClose das barras recentes visíveis ---
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
 
@@ -532,39 +529,63 @@ namespace CvdDivergencia
             if (minCvd == decimal.MaxValue) return;
             if (maxCvd == minCvd) maxCvd = minCvd + 1m;
 
-            // Margem de 15% — maior do que antes para acomodar os wicks (high/low intrabar)
-            // que podem ultrapassar ligeiramente o range dos closes.
+            // Margem de 8% para acomodar os wicks intrabar
             decimal cvdRange  = maxCvd - minCvd;
-            decimal cvdMargin = cvdRange * 0.15m;
+            decimal cvdMargin = cvdRange * 0.08m;
             minCvd -= cvdMargin;
             maxCvd += cvdMargin;
 
-            // Bounds do painel do indicador
+            // Bounds do painel
             int pTop    = reg.Top    + 4;
             int pBottom = reg.Bottom - 4;
             int pHeight = pBottom - pTop;
             if (pHeight <= 0) return;
 
-            // Converte CVD → pixel Y (Y=0 no topo em GDI+)
             double CvdToY(decimal cvd)
             {
                 double ratio = (double)(cvd - minCvd) / (double)(maxCvd - minCvd);
                 return pBottom - ratio * pHeight;
             }
 
-            // Largura de barra — sem gap para candles do mesmo tamanho do CVD nativo
+            // Largura de barra
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
             int candleW = barW;
             int wickW   = Math.Max(1, barW / 6);
 
-            // DEBUG — etiqueta temporária para diagnóstico de sistema de coordenadas
-            // (remover após confirmar valores corretos)
+            // ----------------------------------------------------------------
+            //  Linhas de grade + etiquetas do eixo Y (lado direito)
+            // ----------------------------------------------------------------
             {
-                int xCurr0 = ChartInfo.GetXByBar(CurrentBar, false);
-                int xPrev0 = CurrentBar > 0 ? ChartInfo.GetXByBar(CurrentBar - 1, false) : xCurr0 - barW;
-                var dbgFont = new RenderFont("Arial", 7);
-                string dbg = $"L={reg.Left} R={reg.Right} W={reg.Width} bw={bw:F1} dx={xCurr0 - xPrev0} xC={xCurr0} sess={_sessionStartBar} fb={firstBar} lb={lastBar} minC={_cvdClose[_sessionStartBar]:F0}";
-                context.DrawString(dbg, dbgFont, Color.Yellow, reg.Left + 4, pTop + 2);
+                // Passo "nice" baseado no range
+                decimal rng = maxCvd - minCvd;
+                decimal step;
+                if      (rng <= 200m)   step = 25m;
+                else if (rng <= 500m)   step = 50m;
+                else if (rng <= 1000m)  step = 100m;
+                else if (rng <= 2500m)  step = 250m;
+                else if (rng <= 5000m)  step = 500m;
+                else if (rng <= 10000m) step = 1000m;
+                else                    step = 2000m;
+
+                decimal firstLabel = Math.Ceiling(minCvd / step) * step;
+
+                var gridPen  = new RenderPen(Color.FromArgb(35, 180, 180, 180), 1);
+                var axisFont = new RenderFont("Arial", 8);
+                var axisCol  = Color.FromArgb(180, 180, 180);
+
+                // X do eixo: logo à direita da última barra desenhada
+                int xAxis = ChartInfo.GetXByBar(lastBar, false) + barW / 2 + 4;
+
+                for (decimal v = firstLabel; v <= maxCvd; v += step)
+                {
+                    int yLab = Clamp((int)Math.Round(CvdToY(v)), pTop, pBottom);
+
+                    // Linha de grade horizontal suave
+                    context.DrawLine(gridPen, reg.Left, yLab, xAxis, yLab);
+
+                    // Etiqueta numérica
+                    context.DrawString(CvdLabel(v), axisFont, axisCol, xAxis + 2, yLab - 9);
+                }
             }
 
             // ----------------------------------------------------------------
@@ -579,7 +600,6 @@ namespace CvdDivergencia
 
                 Color barColor = cvdC >= cvdO ? CorCandleAsk : CorCandleBid;
 
-                // GetXByBar(bar, isStartOfBar) — false = centro da barra
                 int xCenter = ChartInfo.GetXByBar(b, false);
                 int xLeft   = xCenter - candleW / 2;
 
@@ -592,14 +612,11 @@ namespace CvdDivergencia
                 int bodyBot = Math.Max(yO, yC);
                 int bodyH   = Math.Max(1, bodyBot - bodyTop);
 
-                // Corpo — FillRectangle(Color, Rectangle) confirmado
                 context.FillRectangle(barColor, new Rectangle(xLeft, bodyTop, candleW, bodyH));
 
-                // Borda semi-transparente — DrawRectangle(RenderPen, Rectangle) confirmado
                 var borderPen = new RenderPen(Color.FromArgb(80, 0, 0, 0));
                 context.DrawRectangle(borderPen, new Rectangle(xLeft, bodyTop, candleW, bodyH));
 
-                // Wicks — DrawLine(RenderPen, x1, y1, x2, y2) confirmado
                 var wickPen = new RenderPen(barColor, wickW);
                 if (yH < bodyTop)
                     context.DrawLine(wickPen, xCenter, yH, xCenter, bodyTop);
@@ -630,13 +647,10 @@ namespace CvdDivergencia
                 int y1 = Clamp((int)Math.Round(CvdToY(div.Cvd1)), pTop, pBottom);
                 int y2 = Clamp((int)Math.Round(CvdToY(div.Cvd2)), pTop, pBottom);
 
-                // Linha de divergência tracejada
-                // ⚠ VERIFICAR: se RenderPen não tiver DashStyle, remover a linha pen.DashStyle
                 var linePen = new RenderPen(lineColor, EspessuraLinha);
                 linePen.DashStyle = DashStyle.Dash;
                 context.DrawLine(linePen, x1, y1, x2, y2);
 
-                // Label — só desenha se a opção estiver ativa
                 if (MostrarEtiquetas)
                 {
                     int labelX = x2 + 6;
@@ -652,5 +666,12 @@ namespace CvdDivergencia
 
         private static int Clamp(int v, int lo, int hi)
             => v < lo ? lo : v > hi ? hi : v;
+
+        private static string CvdLabel(decimal v)
+        {
+            if (v == 0m) return "0";
+            if (Math.Abs(v) >= 1000m) return $"{v / 1000m:F1}K";
+            return $"{(int)v}";
+        }
     }
 }
