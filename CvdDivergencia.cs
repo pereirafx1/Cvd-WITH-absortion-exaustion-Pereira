@@ -127,20 +127,21 @@ namespace CvdDivergencia
 
         public CvdDivergencia()
         {
-            // Série 0: define o sub-painel e a escala Y automática.
-            _cvdClose = new ValueDataSeries("CVD Close")
-            {
-                IsHidden = true,
-                Panel    = IndicatorDataProvider.NewPanel
-            };
+            _cvdClose = new ValueDataSeries("CVD Close") { IsHidden = true };
             _cvdOpen  = new ValueDataSeries("CVD Open")  { IsHidden = true };
             _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true };
             _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true };
 
             DataSeries[0] = _cvdClose;
-            Add(_cvdOpen);
-            Add(_cvdHigh);
-            Add(_cvdLow);
+            // ⚠ VERIFICAR: DataSeries.Add() é a forma correta de adicionar séries em SDK 10
+            // (Indicator.Add() aceita Indicator, não ValueDataSeries)
+            DataSeries.Add(_cvdOpen);
+            DataSeries.Add(_cvdHigh);
+            DataSeries.Add(_cvdLow);
+
+            // ⚠ VERIFICAR: Panel no Indicator (não na série) para criar sub-painel
+            // Se Indicator.Panel não existir, remover esta linha e configurar o painel na UI do ATAS
+            Panel = IndicatorDataProvider.NewPanel;
 
             // Obrigatório para que OnRender seja chamado
             EnableCustomDrawing = true;
@@ -469,8 +470,12 @@ namespace CvdDivergencia
         {
             if (layout != DrawingLayouts.Final) return;
 
-            int firstBar = ChartInfo.FirstVisibleBarNumber;
-            int lastBar  = Math.Min(ChartInfo.LastVisibleBarNumber, CurrentBar);
+            // ⚠ VERIFICAR: FirstVisibleBarNumber / LastVisibleBarNumber não existem em IChart SDK 10.
+            // Alternativas a testar: ChartInfo.FirstVisibleBar, ChartInfo.LastVisibleBar,
+            // ou ChartInfo.GetBarByX(Container.Region.Left) / GetBarByX(Container.Region.Right).
+            // Fallback seguro: renderiza todos os candles (menos eficiente mas correto).
+            int firstBar = 0;
+            int lastBar  = CurrentBar;
 
             if (firstBar > lastBar || lastBar < 0) return;
 
@@ -504,7 +509,7 @@ namespace CvdDivergencia
             }
 
             // Largura de barra confirmada via PriceChartContainer.BarsWidth
-            int barW    = Math.Max(2, ChartInfo.PriceChartContainer.BarsWidth);
+            int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
             int candleW = Math.Max(1, barW - 2);
             int wickW   = Math.Max(1, barW / 6);
 
