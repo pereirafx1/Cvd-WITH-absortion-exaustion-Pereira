@@ -20,12 +20,6 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- System.Drawing.Common: necessário em net10.0 para Color, Rectangle, DashStyle. -->
-    <!-- Em net48 estava incluído no framework; em .NET 5+ requer pacote explícito.      -->
-    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
-  </ItemGroup>
-
-  <ItemGroup>
     <Reference Include="ATAS.Indicators">
       <HintPath>C:\Program Files (x86)\ATAS Platform\ATAS.Indicators.dll</HintPath>
       <Private>false</Private>
