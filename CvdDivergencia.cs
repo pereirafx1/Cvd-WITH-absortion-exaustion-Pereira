@@ -112,6 +112,12 @@ namespace CvdDivergencia
         private readonly List<Divergence> _divs     = new List<Divergence>();
 
         // ====================================================================
+        //  ESTADO INTERNO – sessão
+        // ====================================================================
+
+        private int _sessionStartBar = 0;
+
+        // ====================================================================
         //  ESTADO INTERNO – ES (background)
         // ====================================================================
 
@@ -203,6 +209,7 @@ namespace CvdDivergencia
 
             if (bar == 0 || isNewSession)
             {
+                _sessionStartBar = bar;
                 _cvdOpen[bar]  = 0m;
                 _cvdClose[bar] = c.Delta;
             }
@@ -484,29 +491,24 @@ namespace CvdDivergencia
             var reg = Container.Region;
             double bw = Math.Max(1.0, (double)ChartInfo.PriceChartContainer.BarsWidth);
 
-            // Número aproximado de barras visíveis com base na largura do painel
-            int approxVisible = Math.Max(10, (int)(reg.Width / bw));
+            // reg.Right é o bordo direito do painel em coordenadas de ecrã (≈ largura visível em px).
+            // reg.Width NÃO É a largura visível — é reg.Right − reg.Left, onde reg.Left é o bordo
+            // esquerdo do CANVAS total (número negativo grande), tornando reg.Width enorme.
+            // Usar reg.Right / bw dá o número correto de barras que cabem no viewport.
+            int approxVisible = Math.Max(10, (int)(reg.Right / bw));
 
-            // Âncora no CurrentBar: GetXByBar(CurrentBar) dá sempre a posição correta
-            // da barra mais recente, mesmo quando está fora do ecrã à direita.
-            // A partir dessa posição calculamos quantas barras estão deslocadas para a direita
-            // do limite visível (reg.Right) e ajustamos lastBar em conformidade.
             int firstBar, lastBar;
             {
                 int xCurr  = ChartInfo.GetXByBar(CurrentBar, false);
                 double barsOffRight = (xCurr - reg.Right) / bw;
 
                 if (barsOffRight > 0.5)
-                {
-                    // Chart está scrollado para a esquerda: CurrentBar está fora do ecrã à direita
-                    lastBar  = Math.Min(CurrentBar, Math.Max(0, (int)(CurrentBar - barsOffRight)));
-                }
+                    lastBar = Math.Min(CurrentBar, Math.Max(0, (int)(CurrentBar - barsOffRight)));
                 else
-                {
                     lastBar = CurrentBar;
-                }
 
-                firstBar = Math.Max(0, lastBar - approxVisible - 2);
+                // Nunca ir antes do início da sessão atual
+                firstBar = Math.Max(_sessionStartBar, Math.Max(0, lastBar - approxVisible - 2));
             }
 
             if (firstBar > lastBar) return;
@@ -548,16 +550,6 @@ namespace CvdDivergencia
             {
                 double ratio = (double)(cvd - minCvd) / (double)(maxCvd - minCvd);
                 return pBottom - ratio * pHeight;
-            }
-
-            // Linha de referência CVD = 0 — só aparece quando 0 está dentro do intervalo visível
-            int yZero = (int)Math.Round(CvdToY(0m));
-            if (yZero >= pTop && yZero <= pBottom)
-            {
-                var zeroPen = new RenderPen(Color.FromArgb(100, 180, 180, 180), 1);
-                context.DrawLine(zeroPen, reg.Left, yZero, reg.Right, yZero);
-                var zeroFont = new RenderFont("Arial", 7);
-                context.DrawString("0", zeroFont, Color.FromArgb(150, 200, 200, 200), reg.Left + 2, yZero - 9);
             }
 
             // Largura de barra — sem gap para candles do mesmo tamanho do CVD nativo
