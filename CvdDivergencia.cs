@@ -470,12 +470,30 @@ namespace CvdDivergencia
         {
             if (layout != DrawingLayouts.Final) return;
 
-            // ⚠ VERIFICAR: FirstVisibleBarNumber / LastVisibleBarNumber não existem em IChart SDK 10.
-            // Alternativas a testar: ChartInfo.FirstVisibleBar, ChartInfo.LastVisibleBar,
-            // ou ChartInfo.GetBarByX(Container.Region.Left) / GetBarByX(Container.Region.Right).
-            // Fallback seguro: renderiza todos os candles (menos eficiente mas correto).
-            int firstBar = 0;
-            int lastBar  = CurrentBar;
+            // Encontrar barras visíveis via binary search em GetXByBar (O log n, sem precisar de API extra).
+            // Pressuposto: barra 0 é a mais à esquerda; CurrentBar é a mais à direita.
+            var regForBars = Container.Region;
+            int firstBar, lastBar;
+            {
+                int lo = 0, hi = CurrentBar, fb = 0;
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    if (ChartInfo.GetXByBar(mid, false) < regForBars.Left) { fb = mid + 1; lo = mid + 1; }
+                    else hi = mid - 1;
+                }
+                firstBar = fb;
+
+                lo = firstBar; hi = CurrentBar;
+                int lb = CurrentBar;
+                while (lo <= hi)
+                {
+                    int mid = (lo + hi) / 2;
+                    if (ChartInfo.GetXByBar(mid, false) > regForBars.Right) { lb = mid - 1; hi = mid - 1; }
+                    else lo = mid + 1;
+                }
+                lastBar = Math.Min(lb, CurrentBar);
+            }
 
             if (firstBar > lastBar || lastBar < 0) return;
 
