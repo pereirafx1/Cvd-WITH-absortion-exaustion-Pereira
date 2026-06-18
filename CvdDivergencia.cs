@@ -526,8 +526,7 @@ namespace CvdDivergencia
             minCvd -= cvdMargin;
             maxCvd += cvdMargin;
 
-            // Bounds do painel do indicador (Container.Region confirmado em exemplos SDK)
-            var reg    = Container.Region;
+            // Bounds do painel do indicador
             int pTop    = reg.Top    + 4;
             int pBottom = reg.Bottom - 4;
             int pHeight = pBottom - pTop;
