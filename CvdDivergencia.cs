@@ -496,15 +496,14 @@ namespace CvdDivergencia
             var reg = Container.Region;
             double bw = Math.Max(1.0, (double)ChartInfo.PriceChartContainer.BarsWidth);
 
-            // Determinar lastBar: se a barra atual estiver à direita da região visível, recuar.
+            // Determinar lastBar
             int xCurr = ChartInfo.GetXByBar(CurrentBar, false);
             double barsOffRight = (xCurr - reg.Right) / bw;
             int lastBar = barsOffRight > 0.5
                 ? Math.Max(0, CurrentBar - (int)barsOffRight)
                 : CurrentBar;
 
-            // firstBar: varrer para trás até encontrar a primeira barra fora da vista à esquerda.
-            // Isso dá o range exato de barras visíveis sem estimativas de largura de ecrã.
+            // firstBar: primeira barra cujo X >= reg.Left (primeira visível no viewport)
             int firstBar = Math.Max(_sessionStartBar, 0);
             for (int b = lastBar - 1; b > Math.Max(_sessionStartBar, 0); b--)
             {
@@ -517,17 +516,42 @@ namespace CvdDivergencia
 
             if (firstBar > lastBar) return;
 
-            int pTop    = reg.Top    + 2;
-            int pBottom = reg.Bottom - 2;
-            if (pTop >= pBottom) return;
+            // Min/max a partir de _cvdHigh/_cvdLow das barras visíveis —
+            // é o mesmo intervalo que o ATAS usa para a escala nativa do lado direito.
+            decimal minCvd = decimal.MaxValue;
+            decimal maxCvd = decimal.MinValue;
+            for (int b = firstBar; b <= lastBar; b++)
+            {
+                if (_cvdHigh[b] > maxCvd) maxCvd = _cvdHigh[b];
+                if (_cvdLow[b]  < minCvd) minCvd = _cvdLow[b];
+            }
+            if (minCvd == decimal.MaxValue) return;
+            if (maxCvd == minCvd) { maxCvd += 1m; minCvd -= 1m; }
+
+            // Margem de 5 % para que os wicks extremos não toquem as bordas do painel
+            decimal margin = Math.Max(1m, (maxCvd - minCvd) * 0.05m);
+            decimal adjMin = minCvd - margin;
+            decimal adjMax = maxCvd + margin;
+
+            // Usar os limites exatos do painel (sem padding) para corresponder à escala ATAS
+            int pTop    = reg.Top;
+            int pBottom = reg.Bottom;
+            int pHeight = pBottom - pTop;
+            if (pHeight <= 0) return;
+
+            // Mapeamento CVD → pixel Y (mesma fórmula que o ATAS usa internamente)
+            int CvdToY(decimal cvd)
+            {
+                double ratio = (double)(cvd - adjMin) / (double)(adjMax - adjMin);
+                return Clamp((int)Math.Round(pBottom - ratio * pHeight), pTop, pBottom);
+            }
 
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
             int candleW = barW;
             int wickW   = Math.Max(1, barW / 6);
 
             // ----------------------------------------------------------------
-            //  CVD candles — Y calculado via ChartInfo.GetYByPrice, que usa
-            //  a escala nativa do sub-painel (definida por _cvdHigh/_cvdLow).
+            //  CVD candles
             // ----------------------------------------------------------------
             for (int b = Math.Max(0, firstBar); b <= lastBar; b++)
             {
@@ -540,10 +564,10 @@ namespace CvdDivergencia
                 int xCenter = ChartInfo.GetXByBar(b, false);
                 int xLeft   = xCenter - candleW / 2;
 
-                int yO = Clamp((int)ChartInfo.GetYByPrice(cvdO), pTop, pBottom);
-                int yC = Clamp((int)ChartInfo.GetYByPrice(cvdC), pTop, pBottom);
-                int yH = Clamp((int)ChartInfo.GetYByPrice(cvdH), pTop, pBottom);
-                int yL = Clamp((int)ChartInfo.GetYByPrice(cvdL), pTop, pBottom);
+                int yO = CvdToY(cvdO);
+                int yC = CvdToY(cvdC);
+                int yH = CvdToY(cvdH);
+                int yL = CvdToY(cvdL);
 
                 int bodyTop = Math.Min(yO, yC);
                 int bodyBot = Math.Max(yO, yC);
@@ -574,8 +598,8 @@ namespace CvdDivergencia
 
                 int x1 = ChartInfo.GetXByBar(div.Bar1, false);
                 int x2 = ChartInfo.GetXByBar(div.Bar2, false);
-                int y1 = Clamp((int)ChartInfo.GetYByPrice(div.Cvd1), pTop, pBottom);
-                int y2 = Clamp((int)ChartInfo.GetYByPrice(div.Cvd2), pTop, pBottom);
+                int y1 = CvdToY(div.Cvd1);
+                int y2 = CvdToY(div.Cvd2);
 
                 var linePen = new RenderPen(lineColor, EspessuraLinha);
                 linePen.DashStyle = DashStyle.Dash;
