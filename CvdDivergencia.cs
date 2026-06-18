@@ -359,12 +359,16 @@ namespace CvdDivergencia
             _esSource = null;
         }
 
-        // ⚠ VERIFICAR: tipo do EventArgs (pode ser EventArgs ou outro tipo específico do SDK)
-        // Alternativa: private void OnEsCandle(object sender, EventArgs e)
-        private void OnEsCandle(object sender, CandleEventArgs e)
+        // EventArgs (base) é contra-variante: compatível com qualquer EventHandler<T> onde T : EventArgs.
+        // Acesso à candle via reflexão evita dependência do nome exacto do tipo EventArgs do SDK.
+        // ⚠ VERIFICAR: se o SDK expõe a candle como e.Candle, e.Bar, e.Value ou outra propriedade,
+        //              substitua o GetProperty("Candle") pelo nome correto.
+        private void OnEsCandle(object sender, EventArgs e)
         {
-            // ⚠ VERIFICAR: acesso à candle (pode ser e.Value ou e.Bar em vez de e.Candle)
-            var c = e.Candle;
+            var candleProp = e.GetType().GetProperty("Candle");
+            if (candleProp == null) return;
+            var c = candleProp.GetValue(e) as IndicatorCandle;
+            if (c == null) return;
 
             lock (_esLock)
             {

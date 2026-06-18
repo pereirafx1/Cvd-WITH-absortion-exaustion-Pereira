@@ -1,16 +1,26 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net48</TargetFramework>
+    <!-- ATAS SDK 8.0.13+ é compilado para .NET 10 (System.Runtime 10.0.0.0).  -->
+    <!-- Usar net48 causava CS1705 e tornava TODOS os tipos do SDK inacessíveis. -->
+    <TargetFramework>net10.0</TargetFramework>
     <AssemblyName>CvdDivergencia</AssemblyName>
     <RootNamespace>CvdDivergencia</RootNamespace>
     <LangVersion>8.0</LangVersion>
     <Nullable>disable</Nullable>
     <OutputType>Library</OutputType>
-    <PlatformTarget>x86</PlatformTarget>
+    <!-- PlatformTarget x86 removido: inválido em net10.0.                      -->
+    <!-- Se o ATAS exigir 32-bit, acrescentar:                                   -->
+    <!--   <RuntimeIdentifier>win-x86</RuntimeIdentifier>                         -->
     <!-- Após compilar, copiar para a pasta de indicadores do ATAS:              -->
     <!-- C:\Users\andre\AppData\Roaming\ATAS\Indicators\                         -->
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- System.Drawing.Common: necessário em net10.0 para Color, Rectangle, DashStyle. -->
+    <!-- Em net48 estava incluído no framework; em .NET 5+ requer pacote explícito.      -->
+    <PackageReference Include="System.Drawing.Common" Version="10.0.0" />
+  </ItemGroup>
 
   <ItemGroup>
     <Reference Include="ATAS.Indicators">
