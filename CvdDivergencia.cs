@@ -127,10 +127,10 @@ namespace CvdDivergencia
 
         public CvdDivergencia()
         {
-            _cvdClose = new ValueDataSeries("CVD Close") { IsHidden = true };
-            _cvdOpen  = new ValueDataSeries("CVD Open")  { IsHidden = true };
-            _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true };
-            _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true };
+            _cvdClose = new ValueDataSeries("CVD Close") { IsHidden = true, VisualType = VisualMode.Hide };
+            _cvdOpen  = new ValueDataSeries("CVD Open")  { IsHidden = true, VisualType = VisualMode.Hide };
+            _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true, VisualType = VisualMode.Hide };
+            _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true, VisualType = VisualMode.Hide };
 
             DataSeries[0] = _cvdClose;
             // ⚠ VERIFICAR: DataSeries.Add() é a forma correta de adicionar séries em SDK 10
