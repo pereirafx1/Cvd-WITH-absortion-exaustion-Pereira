@@ -512,26 +512,28 @@ namespace CvdDivergencia
             if (firstBar > lastBar) return;
 
             // --- Calcular min/max CVD nas barras visíveis ---
+            // Usamos apenas _cvdClose para a escala Y.
+            // _cvdHigh/_cvdLow incluem peakBuy/peakSell intrabar que podem cruzar 0
+            // mesmo com o CVD em terreno profundamente negativo, forçando a linha do 0
+            // a aparecer no topo e criando espaço vazio. O _cvdClose é o CVD acumulado
+            // real — a escala reflecte para onde o CVD efectivamente foi.
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
 
             for (int b = firstBar; b <= lastBar; b++)
             {
-                decimal lo = _cvdLow[b];
-                // Em barras de início de sessão, _cvdOpen == 0 e _cvdHigh >= 0 sempre,
-                // o que forçaria maxCvd = 0 e criaria espaço vazio no topo.
-                // Nesses bars usamos _cvdClose para o high, que é o delta real.
-                decimal hi = (_cvdOpen[b] == 0m) ? _cvdClose[b] : _cvdHigh[b];
-                if (lo < minCvd) minCvd = lo;
-                if (hi > maxCvd) maxCvd = hi;
+                decimal cv = _cvdClose[b];
+                if (cv < minCvd) minCvd = cv;
+                if (cv > maxCvd) maxCvd = cv;
             }
 
             if (minCvd == decimal.MaxValue) return;
             if (maxCvd == minCvd) maxCvd = minCvd + 1m;
 
-            // Margem de 8% acima e abaixo — candles não ficam coladas às bordas
+            // Margem de 15% — maior do que antes para acomodar os wicks (high/low intrabar)
+            // que podem ultrapassar ligeiramente o range dos closes.
             decimal cvdRange  = maxCvd - minCvd;
-            decimal cvdMargin = cvdRange * 0.08m;
+            decimal cvdMargin = cvdRange * 0.15m;
             minCvd -= cvdMargin;
             maxCvd += cvdMargin;
 
