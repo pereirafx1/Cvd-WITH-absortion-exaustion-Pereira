@@ -142,8 +142,9 @@ namespace CvdDivergencia
             // e desenhe os valores numéricos no lado direito. Cor preta = invisível no fundo escuro.
             _cvdHigh  = new ValueDataSeries("CVD High")  { IsHidden = true, VisualType = VisualMode.Line };
             _cvdLow   = new ValueDataSeries("CVD Low")   { IsHidden = true, VisualType = VisualMode.Line };
-            _cvdHigh.Color = Color.Black;
-            _cvdLow.Color  = Color.Black;
+            // System.Windows.Media.Color (WPF) — preto é invisível no fundo escuro do ATAS
+            _cvdHigh.Color = System.Windows.Media.Colors.Black;
+            _cvdLow.Color  = System.Windows.Media.Colors.Black;
 
             DataSeries[0] = _cvdClose;
             // ⚠ VERIFICAR: DataSeries.Add() é a forma correta de adicionar séries em SDK 10

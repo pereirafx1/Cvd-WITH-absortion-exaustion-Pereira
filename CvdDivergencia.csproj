@@ -3,7 +3,10 @@
   <PropertyGroup>
     <!-- ATAS SDK 8.0.13+ é compilado para .NET 10 (System.Runtime 10.0.0.0).  -->
     <!-- Usar net48 causava CS1705 e tornava TODOS os tipos do SDK inacessíveis. -->
-    <TargetFramework>net10.0</TargetFramework>
+    <!-- net10.0-windows: necessário para WPF (PresentationCore) — ValueDataSeries.Color -->
+    <!-- é System.Windows.Media.Color, que vive em PresentationCore.                    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
     <AssemblyName>CvdDivergencia</AssemblyName>
     <RootNamespace>CvdDivergencia</RootNamespace>
     <LangVersion>8.0</LangVersion>
