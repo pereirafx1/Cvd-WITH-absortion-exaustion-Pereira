@@ -190,11 +190,18 @@ namespace CvdDivergencia
         {
             var c = GetCandle(bar);
 
-            // Acumular CVD barra a barra
-            if (bar == 0)
+            // Detetar início de nova sessão (mudança de dia) — resetar CVD a 0 como o CVD nativo do ATAS
+            bool isNewSession = false;
+            if (bar > 0)
             {
-                _cvdOpen[0]  = 0m;
-                _cvdClose[0] = c.Delta;
+                var prev = GetCandle(bar - 1);
+                isNewSession = c.Time.Date != prev.Time.Date;
+            }
+
+            if (bar == 0 || isNewSession)
+            {
+                _cvdOpen[bar]  = 0m;
+                _cvdClose[bar] = c.Delta;
             }
             else
             {
@@ -510,7 +517,17 @@ namespace CvdDivergencia
             }
 
             if (minCvd == decimal.MaxValue) return;
+
+            // Incluir sempre 0 no intervalo (CVD começa em 0 a cada sessão, como o CVD nativo do ATAS)
+            if (minCvd > 0m) minCvd = 0m;
+            if (maxCvd < 0m) maxCvd = 0m;
             if (maxCvd == minCvd) maxCvd = minCvd + 1m;
+
+            // Margem de 8% acima e abaixo para as candles não ficarem coladas às bordas
+            decimal cvdRange  = maxCvd - minCvd;
+            decimal cvdMargin = cvdRange * 0.08m;
+            minCvd -= cvdMargin;
+            maxCvd += cvdMargin;
 
             // Bounds do painel do indicador (Container.Region confirmado em exemplos SDK)
             var reg    = Container.Region;
@@ -525,6 +542,13 @@ namespace CvdDivergencia
                 double ratio = (double)(cvd - minCvd) / (double)(maxCvd - minCvd);
                 return pBottom - ratio * pHeight;
             }
+
+            // Linha de referência CVD = 0 (início de sessão)
+            int yZero = Clamp((int)Math.Round(CvdToY(0m)), pTop, pBottom);
+            var zeroPen = new RenderPen(Color.FromArgb(100, 180, 180, 180), 1);
+            context.DrawLine(zeroPen, reg.Left, yZero, reg.Right, yZero);
+            var zeroFont = new RenderFont("Arial", 7);
+            context.DrawString("0", zeroFont, Color.FromArgb(150, 200, 200, 200), reg.Left + 2, yZero - 9);
 
             // Largura de barra confirmada via PriceChartContainer.BarsWidth
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
