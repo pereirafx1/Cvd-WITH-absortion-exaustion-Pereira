@@ -520,13 +520,10 @@ namespace CvdDivergencia
 
             if (firstBar > lastBar) return;
 
-            // Escala baseada em _cvdClose das últimas ~100 barras visíveis.
-            // Usar High/Low causava inclusão de valores próximos de 0 (início de sessão)
-            // que inflacionavam a escala e produziam candles minúsculos no fundo do painel.
-            int scaleFirst = Math.Max(firstBar, lastBar - 100);
+            // Escala baseada em _cvdClose de todas as barras visíveis.
             decimal minCvd = decimal.MaxValue;
             decimal maxCvd = decimal.MinValue;
-            for (int b = scaleFirst; b <= lastBar; b++)
+            for (int b = firstBar; b <= lastBar; b++)
             {
                 decimal cv = _cvdClose[b];
                 if (cv < minCvd) minCvd = cv;
@@ -546,11 +543,11 @@ namespace CvdDivergencia
             int pHeight = pBottom - pTop;
             if (pHeight <= 0) return;
 
-            // Mapeamento CVD → pixel Y (mesma fórmula que o ATAS usa internamente)
+            // Mapeamento CVD → pixel Y (sem clamp — clampar causa linhas fantasma no topo/fundo)
             int CvdToY(decimal cvd)
             {
                 double ratio = (double)(cvd - adjMin) / (double)(adjMax - adjMin);
-                return Clamp((int)Math.Round(pBottom - ratio * pHeight), pTop, pBottom);
+                return (int)Math.Round(pBottom - ratio * pHeight);
             }
 
             int barW    = Math.Max(2, (int)ChartInfo.PriceChartContainer.BarsWidth);
@@ -576,16 +573,24 @@ namespace CvdDivergencia
                 int yH = CvdToY(cvdH);
                 int yL = CvdToY(cvdL);
 
-                int bodyTop = Math.Min(yO, yC);
-                int bodyBot = Math.Max(yO, yC);
+                int rawBodyTop = Math.Min(yO, yC);
+                int rawBodyBot = Math.Max(yO, yC);
+
+                // Ignorar barras completamente fora do painel (ex.: barras iniciais de sessão)
+                if (rawBodyTop > pBottom || rawBodyBot < pTop) continue;
+
+                // Clipar corpo ao painel
+                int bodyTop = Math.Max(rawBodyTop, pTop);
+                int bodyBot = Math.Min(rawBodyBot, pBottom);
                 int bodyH   = Math.Max(1, bodyBot - bodyTop);
 
                 context.FillRectangle(barColor, new Rectangle(xLeft, bodyTop, candleW, bodyH));
                 var borderPen = new RenderPen(Color.FromArgb(80, 0, 0, 0));
                 context.DrawRectangle(borderPen, new Rectangle(xLeft, bodyTop, candleW, bodyH));
                 var wickPen = new RenderPen(barColor, wickW);
-                if (yH < bodyTop) context.DrawLine(wickPen, xCenter, yH, xCenter, bodyTop);
-                if (yL > bodyBot) context.DrawLine(wickPen, xCenter, bodyBot, xCenter, yL);
+                // Só desenhar wick se estiver dentro do painel e além do corpo
+                if (yH < rawBodyTop && yH >= pTop) context.DrawLine(wickPen, xCenter, yH, xCenter, bodyTop);
+                if (yL > rawBodyBot && yL <= pBottom) context.DrawLine(wickPen, xCenter, bodyBot, xCenter, yL);
             }
 
             // ----------------------------------------------------------------
@@ -605,8 +610,8 @@ namespace CvdDivergencia
 
                 int x1 = ChartInfo.GetXByBar(div.Bar1, false);
                 int x2 = ChartInfo.GetXByBar(div.Bar2, false);
-                int y1 = CvdToY(div.Cvd1);
-                int y2 = CvdToY(div.Cvd2);
+                int y1 = Clamp(CvdToY(div.Cvd1), pTop, pBottom);
+                int y2 = Clamp(CvdToY(div.Cvd2), pTop, pBottom);
 
                 var linePen = new RenderPen(lineColor, EspessuraLinha);
                 linePen.DashStyle = DashStyle.Dash;
