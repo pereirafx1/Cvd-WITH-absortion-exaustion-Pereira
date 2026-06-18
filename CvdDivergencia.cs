@@ -112,7 +112,7 @@ namespace CvdDivergencia
         //  ESTADO INTERNO – ES (background)
         // ====================================================================
 
-        private SecurityDataSource        _esSource;
+        private object                    _esSource;   // SecurityDataSource — ⚠ VERIFICAR (ver StartEsSource)
         private readonly List<decimal>    _esCvdClose = new List<decimal>();
         private readonly List<DateTime>   _esTime     = new List<DateTime>();
         private readonly List<SwingPoint> _highsES    = new List<SwingPoint>();
@@ -330,32 +330,26 @@ namespace CvdDivergencia
             DisposeEsSource();
             if (!RequererES) return;
 
-            try
-            {
-                // ⚠ VERIFICAR: construtor e tipo do segundo argumento (period)
-                _esSource = new SecurityDataSource("ES", CurrentSeries.Period);
-                // ⚠ VERIFICAR: nome do evento (pode ser NewCandle ou CandleUpdated)
-                _esSource.NewCandleCreated += OnEsCandle;
-                _esSource.Start();
-            }
-            catch (Exception)
-            {
-                // ES não disponível — o indicador continua em modo NQ-only
-                _esSource = null;
-            }
+            // ⚠ VERIFICAR: 'SecurityDataSource' não foi encontrado em nenhum dos DLLs
+            // referenciados. Para ativar o ES simultâneo:
+            //   1. Descobrir o nome/namespace correto via IntelliSense ou exemplos SDK
+            //      (pode ser ATAS.Indicators.Technical.SecurityDataSource, OFT.Core.SecurityDataSource, etc.)
+            //   2. Adicionar o using correspondente no topo do ficheiro
+            //   3. Mudar o tipo do campo _esSource para o tipo concreto
+            //   4. Descomentar e corrigir as linhas abaixo:
+            //
+            //   _esSource = new SecurityDataSource("ES", CurrentSeries.Period);
+            //   // ⚠ VERIFICAR nome do evento: NewCandleCreated / NewCandle / CandleUpdated
+            //   _esSource.NewCandleCreated += OnEsCandle;
+            //   _esSource.Start();
         }
 
         private void DisposeEsSource()
         {
-            if (_esSource == null) return;
-            try
-            {
-                // ⚠ VERIFICAR: nome do evento (deve ser o mesmo do Subscribe acima)
-                _esSource.NewCandleCreated -= OnEsCandle;
-                _esSource.Stop();
-                _esSource.Dispose();
-            }
-            catch { /* ignorar erros de dispose */ }
+            // ⚠ VERIFICAR: quando StartEsSource estiver implementado, acrescentar aqui:
+            //   _esSource.NewCandleCreated -= OnEsCandle;
+            //   _esSource.Stop();
+            //   (_esSource as IDisposable)?.Dispose();
             _esSource = null;
         }
 
