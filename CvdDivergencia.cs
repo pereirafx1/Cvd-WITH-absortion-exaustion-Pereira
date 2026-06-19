@@ -45,6 +45,10 @@ namespace CvdDivergencia
         [Range(1, 30)]
         public int DiasParaMostrar { get; set; } = 5;
 
+        [Display(Name = "Força do Pivot (barras cada lado)", GroupName = "Divergências", Order = 5)]
+        [Range(1, 10)]
+        public int ForcaPivot { get; set; } = 3;
+
         [Display(Name = "Requerer ES Simultâneo", GroupName = "Modo Simultâneo", Order = 0)]
         public bool RequererES { get; set; } = false;
 
@@ -219,8 +223,7 @@ namespace CvdDivergencia
 
             _lastBarTime = c.Time;
 
-            // Detetar swing points (pivot de 3 barras, confirmado em bar-1)
-            if (bar >= 2)
+            if (bar >= ForcaPivot * 2)
                 DetectAndCheckNQ(bar);
         }
 
@@ -230,40 +233,33 @@ namespace CvdDivergencia
 
         private void DetectAndCheckNQ(int bar)
         {
-            var c0 = GetCandle(bar - 2);
-            var c1 = GetCandle(bar - 1);   // barra candidata — a do meio
-            var c2 = GetCandle(bar);
+            int pivot = bar - ForcaPivot;
+            var cp    = GetCandle(pivot);
 
-            // ---- Swing High confirmado em bar-1 ----
-            if (c1.High > c0.High && c1.High > c2.High)
+            bool isHigh = true;
+            bool isLow  = true;
+            for (int i = 1; i <= ForcaPivot; i++)
             {
-                var sp = new SwingPoint
-                {
-                    Bar    = bar - 1,
-                    Price  = c1.High,
-                    CvdVal = _cvdHigh[bar - 1],
-                    Time   = c1.Time
-                };
-                _highsNQ.RemoveAll(s => s.Bar == bar - 1);
-                _highsNQ.Add(sp);
+                var before = GetCandle(pivot - i);
+                var after  = GetCandle(pivot + i);
+                if (before.High >= cp.High || after.High >= cp.High) isHigh = false;
+                if (before.Low  <= cp.Low  || after.Low  <= cp.Low)  isLow  = false;
+            }
 
+            if (isHigh)
+            {
+                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = _cvdHigh[pivot], Time = cp.Time };
+                _highsNQ.RemoveAll(s => s.Bar == pivot);
+                _highsNQ.Add(sp);
                 if (_highsNQ.Count >= 2)
                     TryAddHighDiv(_highsNQ[_highsNQ.Count - 2], sp);
             }
 
-            // ---- Swing Low confirmado em bar-1 ----
-            if (c1.Low < c0.Low && c1.Low < c2.Low)
+            if (isLow)
             {
-                var sp = new SwingPoint
-                {
-                    Bar    = bar - 1,
-                    Price  = c1.Low,
-                    CvdVal = _cvdLow[bar - 1],
-                    Time   = c1.Time
-                };
-                _lowsNQ.RemoveAll(s => s.Bar == bar - 1);
+                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = _cvdLow[pivot], Time = cp.Time };
+                _lowsNQ.RemoveAll(s => s.Bar == pivot);
                 _lowsNQ.Add(sp);
-
                 if (_lowsNQ.Count >= 2)
                     TryAddLowDiv(_lowsNQ[_lowsNQ.Count - 2], sp);
             }
@@ -480,7 +476,8 @@ namespace CvdDivergencia
 
             // Filtrar por janela de dias; _lastBarTime cacheado em OnCalculate
             // (GetCandle em OnRender pode causar exceção silenciosa no ATAS).
-            DateTime cutoff = _lastBarTime.AddDays(-DiasParaMostrar);
+            // .Date elimina a hora: DiasParaMostrar=1 → só hoje; =2 → hoje+ontem; etc.
+            DateTime cutoff = _lastBarTime.Date.AddDays(1 - DiasParaMostrar);
             var toDraw = _divs.Where(d => d.Time2 >= cutoff).ToList();
             if (toDraw.Count == 0) return;
 
