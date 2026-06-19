@@ -102,7 +102,8 @@ namespace CvdDivergencia
         //  ESTADO INTERNO – sessão
         // ====================================================================
 
-        private int _sessionStartBar = 0;
+        private int      _sessionStartBar = 0;
+        private DateTime _lastBarTime     = DateTime.MinValue;
 
         // ====================================================================
         //  ESTADO INTERNO – ES (background)
@@ -215,6 +216,8 @@ namespace CvdDivergencia
                 _cvdHigh[bar] = _cvdClose[bar];
                 _cvdLow[bar]  = _cvdClose[bar];
             }
+
+            _lastBarTime = c.Time;
 
             // Detetar swing points (pivot de 3 barras, confirmado em bar-1)
             if (bar >= 2)
@@ -473,10 +476,11 @@ namespace CvdDivergencia
             if (layout != DrawingLayouts.Final) return;
             if (CurrentBar <= 0) return;
 
-            // Filtrar por janela de dias a partir da última barra calculada.
-            // Não filtramos por viewport: GetXByBar devolve sempre a posição correta
-            // mesmo fora do ecrã, e o sistema de rendering clipa automaticamente.
-            DateTime cutoff = GetCandle(CurrentBar).Time.AddDays(-DiasParaMostrar);
+            if (_lastBarTime == DateTime.MinValue) return;
+
+            // Filtrar por janela de dias; _lastBarTime cacheado em OnCalculate
+            // (GetCandle em OnRender pode causar exceção silenciosa no ATAS).
+            DateTime cutoff = _lastBarTime.AddDays(-DiasParaMostrar);
             var toDraw = _divs.Where(d => d.Time2 >= cutoff).ToList();
             if (toDraw.Count == 0) return;
 
