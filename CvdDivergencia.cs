@@ -256,10 +256,16 @@ namespace CvdDivergencia
 
             if (isHigh)
             {
-                // Delta da própria barra do swing (compra líquida nessa barra).
-                // Comparar deltas entre dois highs evita o drift acumulado da sessão:
-                // se preço subiu mas delta desceu → menos pressão compradora → exaustão.
-                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = cp.Delta, Time = cp.Time };
+                // CVD HIGH na janela ±ForcaPivot em torno do swing: máximo do CVD cumulativo
+                // nos bares que definem o pivot. Compara "onde o CVD chegou no topo do swing"
+                // entre dois swing highs consecutivos — independente do drift de sessão.
+                int    wEnd    = pivot + ForcaPivot; // = bar (já calculado)
+                int    wStart  = Math.Max(0, pivot - ForcaPivot);
+                decimal cvdPeak = decimal.MinValue;
+                for (int i = wStart; i <= wEnd; i++)
+                    cvdPeak = Math.Max(cvdPeak, _cvdClose[i]);
+
+                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = cvdPeak, Time = cp.Time };
                 _highsNQ.RemoveAll(s => s.Bar == pivot);
                 _highsNQ.Add(sp);
                 if (_highsNQ.Count >= 2)
@@ -268,9 +274,15 @@ namespace CvdDivergencia
 
             if (isLow)
             {
-                // Delta da própria barra do swing (venda líquida nessa barra, tipicamente negativo).
-                // Se preço fez novo low mas delta subiu (menos negativo) → menos pressão vendedora → exaustão.
-                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = cp.Delta, Time = cp.Time };
+                // CVD LOW na janela ±ForcaPivot em torno do swing: mínimo do CVD cumulativo.
+                // Compara "onde o CVD caiu no fundo do swing" entre dois swing lows consecutivos.
+                int    wEnd      = pivot + ForcaPivot;
+                int    wStart    = Math.Max(0, pivot - ForcaPivot);
+                decimal cvdTrough = decimal.MaxValue;
+                for (int i = wStart; i <= wEnd; i++)
+                    cvdTrough = Math.Min(cvdTrough, _cvdClose[i]);
+
+                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = cvdTrough, Time = cp.Time };
                 _lowsNQ.RemoveAll(s => s.Bar == pivot);
                 _lowsNQ.Add(sp);
                 if (_lowsNQ.Count >= 2)
