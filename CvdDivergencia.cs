@@ -256,8 +256,10 @@ namespace CvdDivergencia
 
             if (isHigh)
             {
-                // CVD acumulado da sessão no fecho do swing high — comparação clássica de divergência.
-                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = _cvdClose[pivot], Time = cp.Time };
+                // Delta da própria barra do swing (compra líquida nessa barra).
+                // Comparar deltas entre dois highs evita o drift acumulado da sessão:
+                // se preço subiu mas delta desceu → menos pressão compradora → exaustão.
+                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = cp.Delta, Time = cp.Time };
                 _highsNQ.RemoveAll(s => s.Bar == pivot);
                 _highsNQ.Add(sp);
                 if (_highsNQ.Count >= 2)
@@ -266,8 +268,9 @@ namespace CvdDivergencia
 
             if (isLow)
             {
-                // CVD acumulado da sessão no fecho do swing low.
-                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = _cvdClose[pivot], Time = cp.Time };
+                // Delta da própria barra do swing (venda líquida nessa barra, tipicamente negativo).
+                // Se preço fez novo low mas delta subiu (menos negativo) → menos pressão vendedora → exaustão.
+                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = cp.Delta, Time = cp.Time };
                 _lowsNQ.RemoveAll(s => s.Bar == pivot);
                 _lowsNQ.Add(sp);
                 if (_lowsNQ.Count >= 2)
