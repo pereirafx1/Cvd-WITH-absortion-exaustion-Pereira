@@ -252,7 +252,9 @@ namespace CvdDivergencia
 
             if (isHigh)
             {
-                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = _cvdHigh[pivot], Time = cp.Time };
+                // MaxDelta = pico de delta comprador dentro da barra (independente da sessão).
+                // _cvdHigh usa CVD acumulado da sessão, que cria falsos sinais quando CVD está em tendência.
+                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = Math.Max(0m, cp.MaxDelta), Time = cp.Time };
                 _highsNQ.RemoveAll(s => s.Bar == pivot);
                 _highsNQ.Add(sp);
                 if (_highsNQ.Count >= 2)
@@ -261,7 +263,8 @@ namespace CvdDivergencia
 
             if (isLow)
             {
-                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = _cvdLow[pivot], Time = cp.Time };
+                // MinDelta = pico de delta vendedor dentro da barra (valor negativo, independente da sessão).
+                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = Math.Min(0m, cp.MinDelta), Time = cp.Time };
                 _lowsNQ.RemoveAll(s => s.Bar == pivot);
                 _lowsNQ.Add(sp);
                 if (_lowsNQ.Count >= 2)
