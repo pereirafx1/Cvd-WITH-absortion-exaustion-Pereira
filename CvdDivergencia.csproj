@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- ATAS SDK 8.0.13+ é compilado para .NET 10 (System.Runtime 10.0.0.0).  -->
+    <!-- Usar net48 causava CS1705 e tornava TODOS os tipos do SDK inacessíveis. -->
+    <!-- net10.0-windows: necessário para WPF (PresentationCore) — ValueDataSeries.Color -->
+    <!-- é System.Windows.Media.Color, que vive em PresentationCore.                    -->
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>CvdDivergencia</AssemblyName>
+    <RootNamespace>CvdDivergencia</RootNamespace>
+    <LangVersion>8.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <OutputType>Library</OutputType>
+    <!-- PlatformTarget x86 removido: inválido em net10.0.                      -->
+    <!-- Se o ATAS exigir 32-bit, acrescentar:                                   -->
+    <!--   <RuntimeIdentifier>win-x86</RuntimeIdentifier>                         -->
+    <!-- Após compilar, copiar para a pasta de indicadores do ATAS:              -->
+    <!-- C:\Users\andre\AppData\Roaming\ATAS\Indicators\                         -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="ATAS.Indicators">
+      <HintPath>C:\Program Files (x86)\ATAS Platform\ATAS.Indicators.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OFT.Core">
+      <HintPath>C:\Program Files (x86)\ATAS Platform\OFT.Core.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OFT.Rendering">
+      <HintPath>C:\Program Files (x86)\ATAS Platform\OFT.Rendering.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="OFT.Attributes">
+      <HintPath>C:\Program Files (x86)\ATAS Platform\OFT.Attributes.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Utils.Common">
+      <HintPath>C:\Program Files (x86)\ATAS Platform\Utils.Common.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>
