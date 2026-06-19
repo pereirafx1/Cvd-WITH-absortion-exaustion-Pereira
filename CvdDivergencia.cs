@@ -49,6 +49,10 @@ namespace CvdDivergencia
         [Range(1, 10)]
         public int ForcaPivot { get; set; } = 3;
 
+        [Display(Name = "Distância Máxima entre Swings (barras)", GroupName = "Divergências", Order = 6)]
+        [Range(5, 500)]
+        public int MaxDistanciaBars { get; set; } = 60;
+
         [Display(Name = "Requerer ES Simultâneo", GroupName = "Modo Simultâneo", Order = 0)]
         public bool RequererES { get; set; } = false;
 
@@ -271,12 +275,14 @@ namespace CvdDivergencia
 
         private void TryAddHighDiv(SwingPoint prev, SwingPoint curr)
         {
+            if (curr.Bar - prev.Bar > MaxDistanciaBars) return;
+
             bool priceHigher = curr.Price  > prev.Price;
             bool cvdHigher   = curr.CvdVal > prev.CvdVal;
 
             DivType? type = null;
-            if ( priceHigher && !cvdHigher) type = DivType.ExaustaoHigh;   // preço novo high, CVD não confirma
-            if (!priceHigher &&  cvdHigher) type = DivType.AbsorcaoHigh;   // CVD novo high, preço absorvido
+            if ( priceHigher && !cvdHigher) type = DivType.ExaustaoHigh;
+            if (!priceHigher &&  cvdHigher) type = DivType.AbsorcaoHigh;
             if (type == null) return;
 
             if (RequererES && !EsHasHighDiv(type.Value, curr.Time)) return;
@@ -300,6 +306,8 @@ namespace CvdDivergencia
 
         private void TryAddLowDiv(SwingPoint prev, SwingPoint curr)
         {
+            if (curr.Bar - prev.Bar > MaxDistanciaBars) return;
+
             bool priceLower = curr.Price  < prev.Price;
             bool cvdLower   = curr.CvdVal < prev.CvdVal;
 
