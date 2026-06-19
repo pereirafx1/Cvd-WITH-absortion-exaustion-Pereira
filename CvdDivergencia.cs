@@ -53,6 +53,10 @@ namespace CvdDivergencia
         [Range(5, 500)]
         public int MaxDistanciaBars { get; set; } = 60;
 
+        [Display(Name = "Diferença Mínima de Preço entre Swings (pontos)", GroupName = "Divergências", Order = 7)]
+        [Range(0, 100)]
+        public decimal MinDiferencaPreco { get; set; } = 5m;
+
         [Display(Name = "Requerer ES Simultâneo", GroupName = "Modo Simultâneo", Order = 0)]
         public bool RequererES { get; set; } = false;
 
@@ -252,9 +256,8 @@ namespace CvdDivergencia
 
             if (isHigh)
             {
-                // MaxDelta = pico de delta comprador dentro da barra (independente da sessão).
-                // _cvdHigh usa CVD acumulado da sessão, que cria falsos sinais quando CVD está em tendência.
-                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = Math.Max(0m, cp.MaxDelta), Time = cp.Time };
+                // CVD acumulado da sessão no fecho do swing high — comparação clássica de divergência.
+                var sp = new SwingPoint { Bar = pivot, Price = cp.High, CvdVal = _cvdClose[pivot], Time = cp.Time };
                 _highsNQ.RemoveAll(s => s.Bar == pivot);
                 _highsNQ.Add(sp);
                 if (_highsNQ.Count >= 2)
@@ -263,8 +266,8 @@ namespace CvdDivergencia
 
             if (isLow)
             {
-                // MinDelta = pico de delta vendedor dentro da barra (valor negativo, independente da sessão).
-                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = Math.Min(0m, cp.MinDelta), Time = cp.Time };
+                // CVD acumulado da sessão no fecho do swing low.
+                var sp = new SwingPoint { Bar = pivot, Price = cp.Low, CvdVal = _cvdClose[pivot], Time = cp.Time };
                 _lowsNQ.RemoveAll(s => s.Bar == pivot);
                 _lowsNQ.Add(sp);
                 if (_lowsNQ.Count >= 2)
@@ -279,6 +282,7 @@ namespace CvdDivergencia
         private void TryAddHighDiv(SwingPoint prev, SwingPoint curr)
         {
             if (curr.Bar - prev.Bar > MaxDistanciaBars) return;
+            if (Math.Abs(curr.Price - prev.Price) < MinDiferencaPreco) return;
 
             bool priceHigher = curr.Price  > prev.Price;
             bool cvdHigher   = curr.CvdVal > prev.CvdVal;
@@ -310,6 +314,7 @@ namespace CvdDivergencia
         private void TryAddLowDiv(SwingPoint prev, SwingPoint curr)
         {
             if (curr.Bar - prev.Bar > MaxDistanciaBars) return;
+            if (Math.Abs(curr.Price - prev.Price) < MinDiferencaPreco) return;
 
             bool priceLower = curr.Price  < prev.Price;
             bool cvdLower   = curr.CvdVal < prev.CvdVal;
