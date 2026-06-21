@@ -331,6 +331,10 @@ namespace CvdDivergencia
 
                 if (RequererES && !EsHasHighDiv(type.Value, curr.Time)) continue;
 
+                // Cada swing é Bar1 em no máximo 1 div High — remover a anterior se existir
+                _divs.RemoveAll(d => d.Bar1 == prev.Bar &&
+                    (d.Type == DivType.ExaustaoHigh || d.Type == DivType.AbsorcaoHigh));
+
                 _divs.Add(new Divergence
                 {
                     Type   = type.Value,
@@ -339,7 +343,7 @@ namespace CvdDivergencia
                     Price1 = prev.Price,  Price2 = curr.Price,
                     Time2  = curr.Time
                 });
-                return; // usar o par mais recente válido encontrado
+                return;
             }
         }
 
@@ -381,6 +385,10 @@ namespace CvdDivergencia
 
                 if (RequererES && !EsHasLowDiv(type.Value, curr.Time)) continue;
 
+                // Cada swing é Bar1 em no máximo 1 div Low — remover a anterior se existir
+                _divs.RemoveAll(d => d.Bar1 == prev.Bar &&
+                    (d.Type == DivType.ExaustaoLow || d.Type == DivType.AbsorcaoLow));
+
                 _divs.Add(new Divergence
                 {
                     Type   = type.Value,
@@ -389,7 +397,7 @@ namespace CvdDivergencia
                     Price1 = prev.Price,  Price2 = curr.Price,
                     Time2  = curr.Time
                 });
-                return; // usar o par mais recente válido encontrado
+                return;
             }
         }
 
@@ -548,7 +556,9 @@ namespace CvdDivergencia
             // (GetCandle em OnRender pode causar exceção silenciosa no ATAS).
             // .Date elimina a hora: DiasParaMostrar=1 → só hoje; =2 → hoje+ontem; etc.
             DateTime cutoff = _lastBarTime.Date.AddDays(1 - DiasParaMostrar);
-            var toDraw = _divs.Where(d => d.Time2 >= cutoff).ToList();
+            var toDraw = _divs
+                .Where(d => d.Time2 >= cutoff && d.Bar2 - d.Bar1 <= MaxDistanciaBars)
+                .ToList();
             if (toDraw.Count == 0) return;
 
             var labelFont = new RenderFont("Arial", 8);
