@@ -331,6 +331,9 @@ namespace CvdDivergencia
 
                 if (RequererES && !EsHasHighDiv(type.Value, curr.Time)) continue;
 
+                // Rejeitar se alguma candle intermédia cortar a linha entre os dois topos
+                if (!HighLineIsClear(prev.Bar, prev.Price, curr.Bar, curr.Price)) continue;
+
                 // Cada swing é Bar1 em no máximo 1 div High — remover a anterior se existir
                 _divs.RemoveAll(d => d.Bar1 == prev.Bar &&
                     (d.Type == DivType.ExaustaoHigh || d.Type == DivType.AbsorcaoHigh));
@@ -384,6 +387,9 @@ namespace CvdDivergencia
                 if (type == null) continue;
 
                 if (RequererES && !EsHasLowDiv(type.Value, curr.Time)) continue;
+
+                // Rejeitar se alguma candle intermédia cortar a linha entre os dois fundos
+                if (!LowLineIsClear(prev.Bar, prev.Price, curr.Bar, curr.Price)) continue;
 
                 // Cada swing é Bar1 em no máximo 1 div Low — remover a anterior se existir
                 _divs.RemoveAll(d => d.Bar1 == prev.Bar &&
@@ -593,6 +599,34 @@ namespace CvdDivergencia
         // ====================================================================
         //  UTILITÁRIOS
         // ====================================================================
+
+        // Verifica se a linha entre dois swing highs não é cortada por nenhuma candle intermédia.
+        // Uma candle invalida a linha se o seu high atingir ou ultrapassar o valor da linha nesse ponto.
+        private bool HighLineIsClear(int bar1, decimal price1, int bar2, decimal price2)
+        {
+            if (bar2 <= bar1 + 1) return true;
+            decimal span = bar2 - bar1;
+            for (int b = bar1 + 1; b < bar2; b++)
+            {
+                decimal linePrice = price1 + (price2 - price1) * (b - bar1) / span;
+                if (GetCandle(b).High >= linePrice) return false;
+            }
+            return true;
+        }
+
+        // Verifica se a linha entre dois swing lows não é cortada por nenhuma candle intermédia.
+        // Uma candle invalida a linha se o seu low atingir ou descer abaixo do valor da linha nesse ponto.
+        private bool LowLineIsClear(int bar1, decimal price1, int bar2, decimal price2)
+        {
+            if (bar2 <= bar1 + 1) return true;
+            decimal span = bar2 - bar1;
+            for (int b = bar1 + 1; b < bar2; b++)
+            {
+                decimal linePrice = price1 + (price2 - price1) * (b - bar1) / span;
+                if (GetCandle(b).Low <= linePrice) return false;
+            }
+            return true;
+        }
 
         private static int Clamp(int v, int lo, int hi)
             => v < lo ? lo : v > hi ? hi : v;
